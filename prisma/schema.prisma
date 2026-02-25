@@ -1,0 +1,475 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── TENANTS / ORGANIZATIONS ─────────────────────────────────────
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("starter") // starter, pro, enterprise
+  settings  String   @default("{}") // JSON settings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  roles       Role[]
+  apiKeys     ApiKey[]
+  auditLogs   AuditLog[]
+  invitations Invitation[]
+  assets      Asset[]
+  scans       Scan[]
+  scanResults ScanResult[]
+  complianceFrameworks ComplianceFramework[]
+  complianceControls   ComplianceControl[]
+  complianceAssessments ComplianceAssessment[]
+  siemEvents  SiemEvent[]
+  siemAlerts  SiemAlert[]
+  siemRules   SiemRule[]
+  aiActions   AiAction[]
+  reports     Report[]
+  assetGroups AssetGroup[]
+
+  @@map("tenants")
+}
+
+// ─── USERS ───────────────────────────────────────────────────────
+model User {
+  id             String    @id @default(uuid())
+  tenantId       String
+  email          String
+  name           String
+  passwordHash   String?
+  authProvider   String    @default("local") // local, google, azure_ad, okta
+  authProviderId String?
+  status         String    @default("active") // active, invited, suspended, deactivated
+  mfaEnabled     Boolean   @default(false)
+  mfaSecret      String?
+  lastLoginAt    DateTime?
+  lastLoginIp    String?
+  avatarUrl      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles   UserRole[]
+  createdRoles Role[]       @relation("RoleCreator")
+  apiKeys     ApiKey[]      @relation("ApiKeyCreator")
+  invitedBy   Invitation[]  @relation("InvitedBy")
+  auditLogs   AuditLog[]    @relation("AuditActor")
+  assignedRoles UserRole[]  @relation("RoleAssigner")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+// ─── ROLES ───────────────────────────────────────────────────────
+model Role {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  slug         String
+  description  String?
+  isBuiltin    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  parentRoleId String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentRole  Role?           @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  childRoles  Role[]          @relation("RoleHierarchy")
+  createdBy   User?           @relation("RoleCreator", fields: [createdById], references: [id])
+  permissions RolePermission[]
+  userRoles   UserRole[]
+  apiKeys     ApiKey[]
+  invitations Invitation[]
+
+  @@unique([tenantId, slug])
+  @@map("roles")
+}
+
+// ─── PERMISSIONS ─────────────────────────────────────────────────
+model Permission {
+  id          String @id @default(uuid())
+  module      String
+  resource    String
+  action      String
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@unique([module, resource, action])
+  @@map("permissions")
+}
+
+// ─── ROLE <-> PERMISSION MAPPING ─────────────────────────────────
+model RolePermission {
+  id           String  @id @default(uuid())
+  roleId       String
+  permissionId String
+  scope        String  @default("{}") // JSON for ABAC scoping
+  granted      Boolean @default(true) // true = allow, false = explicit deny
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@map("role_permissions")
+}
+
+// ─── USER <-> ROLE MAPPING ───────────────────────────────────────
+model UserRole {
+  id         String    @id @default(uuid())
+  userId     String
+  roleId     String
+  assignedBy String?
+  assignedAt DateTime  @default(now())
+  expiresAt  DateTime?
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assigner User? @relation("RoleAssigner", fields: [assignedBy], references: [id])
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@map("user_roles")
+}
+
+// ─── API KEYS ────────────────────────────────────────────────────
+model ApiKey {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  keyHash     String
+  keyPrefix   String
+  roleId      String
+  createdById String
+  ipAllowlist String?   // JSON array of IPs
+  rateLimit   Int       @default(1000)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id])
+  createdBy User   @relation("ApiKeyCreator", fields: [createdById], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("api_keys")
+}
+
+// ─── AUDIT LOG ───────────────────────────────────────────────────
+model AuditLog {
+  id           String   @id @default(uuid())
+  tenantId     String
+  actorId      String?
+  actorType    String   // user, api_key, system, ai_agent
+  action       String   // e.g. 'role.assigned', 'scan.executed'
+  resourceType String?
+  resourceId   String?
+  details      String   @default("{}") // JSON
+  ipAddress    String?
+  userAgent    String?
+  result       String   // success, denied, error
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@map("audit_log")
+}
+
+// ─── INVITATIONS ─────────────────────────────────────────────────
+model Invitation {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String
+  roleId    String
+  invitedById String
+  tokenHash String
+  status    String   @default("pending") // pending, accepted, expired, revoked
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id])
+  invitedBy User   @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@map("invitations")
+}
+
+// ─── ASSETS ──────────────────────────────────────────────────────
+model AssetGroup {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  slug      String
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assets Asset[]
+
+  @@unique([tenantId, slug])
+  @@map("asset_groups")
+}
+
+model Asset {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  type         String   // server, workstation, network_device, cloud_resource, application, database
+  ipAddress    String?
+  hostname     String?
+  os           String?
+  criticality  String   @default("medium") // critical, high, medium, low
+  status       String   @default("active") // active, inactive, decommissioned
+  tags         String   @default("[]") // JSON array
+  metadata     String   @default("{}") // JSON
+  groupId      String?
+  lastScanAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group       AssetGroup? @relation(fields: [groupId], references: [id])
+  scanResults ScanResult[]
+
+  @@index([tenantId])
+  @@map("assets")
+}
+
+// ─── SCANS ───────────────────────────────────────────────────────
+model Scan {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  type        String    // vulnerability, port, compliance, full
+  status      String    @default("queued") // queued, running, completed, failed, cancelled
+  targets     String    @default("[]") // JSON array of target IPs/ranges
+  config      String    @default("{}") // JSON scan configuration
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdById String?
+  scheduleCron String?  // cron expression for scheduled scans
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  results ScanResult[]
+
+  @@index([tenantId])
+  @@map("scans")
+}
+
+model ScanResult {
+  id          String   @id @default(uuid())
+  tenantId    String
+  scanId      String
+  assetId     String?
+  severity    String   // critical, high, medium, low, info
+  title       String
+  description String?
+  cveId       String?
+  cvssScore   Float?
+  status      String   @default("open") // open, acknowledged, resolved, false_positive
+  remediation String?
+  details     String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  asset  Asset? @relation(fields: [assetId], references: [id])
+
+  @@index([tenantId])
+  @@index([scanId])
+  @@map("scan_results")
+}
+
+// ─── COMPLIANCE ──────────────────────────────────────────────────
+model ComplianceFramework {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // GDPR, PCI DSS, HIPAA
+  version     String   // e.g., "4.0", "2016/679"
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  controls ComplianceControl[]
+
+  @@unique([tenantId, name, version])
+  @@map("compliance_frameworks")
+}
+
+model ComplianceControl {
+  id            String   @id @default(uuid())
+  tenantId      String
+  frameworkId   String
+  controlId     String   // e.g., "Art. 32", "Req. 6.1", "164.312(a)"
+  title         String
+  description   String?
+  category      String?  // e.g., "Data Protection", "Access Control"
+  status        String   @default("not_assessed") // compliant, partially_compliant, non_compliant, not_assessed, not_applicable
+  evidence      String   @default("[]") // JSON array of evidence items
+  notes         String?
+  lastAssessedAt DateTime?
+  nextReviewAt  DateTime?
+  assignedTo    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  framework ComplianceFramework @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+  assessments ComplianceAssessment[]
+
+  @@unique([frameworkId, controlId])
+  @@index([tenantId])
+  @@map("compliance_controls")
+}
+
+model ComplianceAssessment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  controlId   String
+  assessorId  String?
+  status      String   // compliant, partially_compliant, non_compliant, not_applicable
+  findings    String?
+  evidence    String   @default("[]") // JSON
+  remediationPlan String?
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  control ComplianceControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("compliance_assessments")
+}
+
+// ─── SIEM ────────────────────────────────────────────────────────
+model SiemEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  source    String   // firewall, ids, endpoint, cloud, application
+  severity  String   // critical, high, medium, low, info
+  category  String   // authentication, network, malware, policy_violation, system
+  title     String
+  details   String   @default("{}") // JSON
+  sourceIp  String?
+  destIp    String?
+  userId    String?
+  raw       String?  // raw log data
+  createdAt DateTime @default(now())
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alerts SiemAlert[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("siem_events")
+}
+
+model SiemAlert {
+  id           String    @id @default(uuid())
+  tenantId     String
+  ruleId       String?
+  eventId      String?
+  severity     String    // critical, high, medium, low
+  title        String
+  description  String?
+  status       String    @default("open") // open, acknowledged, investigating, resolved, false_positive
+  assignedTo   String?
+  acknowledgedAt DateTime?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rule   SiemRule?  @relation(fields: [ruleId], references: [id])
+  event  SiemEvent? @relation(fields: [eventId], references: [id])
+
+  @@index([tenantId])
+  @@map("siem_alerts")
+}
+
+model SiemRule {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  condition   String   @default("{}") // JSON rule definition
+  severity    String   @default("medium")
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alerts SiemAlert[]
+
+  @@index([tenantId])
+  @@map("siem_rules")
+}
+
+// ─── AI ACTIONS ──────────────────────────────────────────────────
+model AiAction {
+  id           String    @id @default(uuid())
+  tenantId     String
+  type         String    // patch, firewall_rule, risk_override, siem_rule, scan
+  title        String
+  description  String?
+  riskLevel    String    @default("medium") // low, medium, high
+  status       String    @default("pending") // pending, approved, rejected, executed, expired, failed
+  config       String    @default("{}") // JSON action configuration
+  approvedById String?
+  approvedAt   DateTime?
+  executedAt   DateTime?
+  expiresAt    DateTime?
+  result       String?   // JSON result of execution
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("ai_actions")
+}
+
+// ─── REPORTS ─────────────────────────────────────────────────────
+model Report {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  type        String    // vulnerability, compliance, executive, technical, custom
+  template    String?   // template identifier
+  config      String    @default("{}") // JSON report configuration
+  status      String    @default("generating") // generating, completed, failed
+  data        String    @default("{}") // JSON report data
+  createdById String?
+  scheduleCron String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("reports")
+}

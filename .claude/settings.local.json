@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(pip --version)",
+      "Bash(where node)",
+      "Bash(where npm)",
+      "Bash(where python)",
+      "Bash(where pip)",
+      "Bash(where git)",
+      "Bash(python -m pip --version)",
+      "Bash(where winget)",
+      "Bash(winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(git init)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --turbopack)"
+    ]
+  }
+}
