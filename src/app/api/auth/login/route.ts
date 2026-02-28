@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateUser } from "@/lib/auth";
-import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,28 +21,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set auth cookie
-    const cookieStore = await cookies();
-    cookieStore.set("byoc_token", result.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 15 * 60, // 15 minutes
-      path: "/",
-    });
+    const isProduction = process.env.NODE_ENV === "production";
 
-    cookieStore.set("byoc_refresh", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
-    });
-
-    return NextResponse.json({
+    // Set auth cookies via response headers (works reliably on Vercel)
+    const response = NextResponse.json({
       user: result.user,
       message: "Login successful",
     });
+
+    response.cookies.set("byoc_token", result.accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      maxAge: 15 * 60,
+      path: "/",
+    });
+
+    response.cookies.set("byoc_refresh", result.refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(
