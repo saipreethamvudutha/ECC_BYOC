@@ -3,6 +3,22 @@ import { authenticateUser } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    // Check required env vars early
+    if (!process.env.DATABASE_URL) {
+      console.error("Login error: DATABASE_URL is not set");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+    if (!process.env.AUTH_SECRET) {
+      console.error("Login error: AUTH_SECRET is not set");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
     const { email, password } = await request.json();
 
     if (!email || !password) {
@@ -23,7 +39,6 @@ export async function POST(request: NextRequest) {
 
     const isProduction = process.env.NODE_ENV === "production";
 
-    // Set auth cookies via response headers (works reliably on Vercel)
     const response = NextResponse.json({
       user: result.user,
       message: "Login successful",
@@ -47,9 +62,10 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Login error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Login error:", message, error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", detail: process.env.NODE_ENV === "development" ? message : undefined },
       { status: 500 }
     );
   }

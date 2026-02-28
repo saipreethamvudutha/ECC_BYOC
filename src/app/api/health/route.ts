@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const checks = {
+  const checks: Record<string, unknown> = {
     status: "ok",
     timestamp: new Date().toISOString(),
     env: {
@@ -14,13 +14,31 @@ export async function GET() {
   // Test database connection
   try {
     const { prisma } = await import("@/lib/prisma");
-    const count = await prisma.tenant.count();
-    (checks as Record<string, unknown>).database = { connected: true, tenants: count };
+    const tenantCount = await prisma.tenant.count();
+    const userCount = await prisma.user.count();
+    checks.database = { connected: true, tenants: tenantCount, users: userCount };
+
+    if (tenantCount === 0 || userCount === 0) {
+      checks.status = "degraded";
+      checks.warning = "Database is empty. Run: npx prisma db push && npx tsx prisma/seed.ts";
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    (checks as Record<string, unknown>).database = { connected: false, error: message };
-    checks.status = "degraded";
+    checks.database = { connected: false, error: message };
+    checks.status = "error";
   }
 
-  return NextResponse.json(checks);
+  if (!process.env.DATABASE_URL) {
+    checks.status = "error";
+    checks.missingEnv = checks.missingEnv || [];
+    (checks.missingEnv as string[]).push("DATABASE_URL");
+  }
+  if (!process.env.AUTH_SECRET) {
+    checks.status = "error";
+    checks.missingEnv = checks.missingEnv || [];
+    (checks.missingEnv as string[]).push("AUTH_SECRET");
+  }
+
+  const statusCode = checks.status === "error" ? 503 : 200;
+  return NextResponse.json(checks, { status: statusCode });
 }
