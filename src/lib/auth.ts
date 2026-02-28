@@ -4,7 +4,14 @@ import * as bcrypt from "bcryptjs";
 import * as jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = process.env.AUTH_SECRET || "fallback-secret-change-me";
+function getJwtSecret(): string {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("AUTH_SECRET environment variable is required. Generate one with: openssl rand -base64 32");
+  }
+  return secret;
+}
+const JWT_SECRET: string = getJwtSecret();
 const ACCESS_TOKEN_TTL = 15 * 60; // 15 minutes
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days
 

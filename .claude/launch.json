@@ -6,6 +6,18 @@
       "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
       "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--turbopack"],
       "port": 3000
+    },
+    {
+      "name": "byoc-prod",
+      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "start"],
+      "port": 3000
+    },
+    {
+      "name": "prisma-studio",
+      "runtimeExecutable": "C:/Program Files/nodejs/node.exe",
+      "runtimeArgs": ["node_modules/prisma/build/index.js", "studio"],
+      "port": 5555
     }
   ]
 }
