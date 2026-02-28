@@ -7,11 +7,10 @@ import { cookies } from "next/headers";
 function getJwtSecret(): string {
   const secret = process.env.AUTH_SECRET;
   if (!secret) {
-    throw new Error("AUTH_SECRET environment variable is required. Generate one with: openssl rand -base64 32");
+    throw new Error("AUTH_SECRET environment variable is required");
   }
   return secret;
 }
-const JWT_SECRET: string = getJwtSecret();
 const ACCESS_TOKEN_TTL = 15 * 60; // 15 minutes
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days
 
@@ -101,12 +100,12 @@ export async function authenticateUser(
 }
 
 export function generateToken(payload: JWTPayload, expiresIn: number): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn });
 }
 
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, getJwtSecret()) as JWTPayload;
   } catch {
     return null;
   }
