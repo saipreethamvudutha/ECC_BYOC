@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   // Check permission
   const allowed = await rbac.checkPermission(
-    session.id, session.tenantId, "settings.users:create"
+    session.id, session.tenantId, "admin.user.manage"
   );
   if (!allowed) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });

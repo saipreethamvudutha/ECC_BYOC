@@ -14,7 +14,7 @@ export async function GET() {
     include: {
       _count: {
         select: {
-          permissions: true,
+          roleCapabilities: { where: { granted: true } },
           userRoles: true,
         },
       },
@@ -30,7 +30,9 @@ export async function GET() {
       description: r.description,
       isBuiltin: r.isBuiltin,
       isActive: r.isActive,
-      permissionCount: r._count.permissions,
+      maxAssignments: r.maxAssignments,
+      capabilityCount: r._count.roleCapabilities,
+      totalCapabilities: 39,
       userCount: r._count.userRoles,
       createdBy: r.createdBy?.name || "System",
       createdAt: r.createdAt.toISOString(),

@@ -145,7 +145,16 @@ export async function getSession(): Promise<SessionUser | null> {
 }
 
 /**
- * Check if current user has a specific permission.
+ * Check if current user has a specific capability (v2).
+ */
+export async function checkCurrentUserCapability(capability: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  return rbac.checkCapability(session.id, session.tenantId, capability);
+}
+
+/**
+ * Backward-compatible alias for v1 code.
  */
 export async function checkCurrentUserPermission(permission: string): Promise<boolean> {
   const session = await getSession();
@@ -154,7 +163,16 @@ export async function checkCurrentUserPermission(permission: string): Promise<bo
 }
 
 /**
- * Get current user's permissions list (for frontend).
+ * Get current user's capability profile (for frontend).
+ */
+export async function getCurrentUserCapabilities() {
+  const session = await getSession();
+  if (!session) return { capabilities: [], denied: [], roles: [], globalScope: false };
+  return rbac.getProfile(session.id, session.tenantId);
+}
+
+/**
+ * Get current user's permissions list (backward compat).
  */
 export async function getCurrentUserPermissions() {
   const session = await getSession();

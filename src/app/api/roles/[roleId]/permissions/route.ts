@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * GET /api/roles/[roleId]/permissions
+ *
+ * Returns a role's capabilities grouped by module (v2).
+ * Used by the onboarding wizard and role editor.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roleId: string }> }
@@ -10,10 +16,9 @@ export async function GET(
   const role = await prisma.role.findUnique({
     where: { id: roleId },
     include: {
-      permissions: {
-        where: { granted: true },
+      roleCapabilities: {
         include: {
-          permission: true,
+          capability: true,
         },
       },
     },
@@ -23,20 +28,25 @@ export async function GET(
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
   }
 
-  // Group permissions by module
-  const permissionsByModule: Record<
+  // Group capabilities by module
+  const capabilitiesByModule: Record<
     string,
-    { resource: string; action: string; description: string }[]
+    { id: string; name: string; description: string; riskLevel: string; granted: boolean }[]
   > = {};
 
-  for (const rp of role.permissions) {
-    const mod = rp.permission.module;
-    if (!permissionsByModule[mod]) permissionsByModule[mod] = [];
-    permissionsByModule[mod].push({
-      resource: rp.permission.resource,
-      action: rp.permission.action,
-      description: rp.permission.description || "",
+  let grantedCount = 0;
+
+  for (const rc of role.roleCapabilities) {
+    const mod = rc.capability.module;
+    if (!capabilitiesByModule[mod]) capabilitiesByModule[mod] = [];
+    capabilitiesByModule[mod].push({
+      id: rc.capabilityId,
+      name: rc.capability.name,
+      description: rc.capability.description || "",
+      riskLevel: rc.capability.riskLevel,
+      granted: rc.granted,
     });
+    if (rc.granted) grantedCount++;
   }
 
   return NextResponse.json({
@@ -45,8 +55,11 @@ export async function GET(
       name: role.name,
       slug: role.slug,
       description: role.description,
+      isBuiltin: role.isBuiltin,
+      maxAssignments: role.maxAssignments,
     },
-    permissionsByModule,
-    totalPermissions: role.permissions.length,
+    capabilitiesByModule,
+    totalCapabilities: grantedCount,
+    totalAvailable: 39,
   });
 }

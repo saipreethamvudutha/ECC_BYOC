@@ -34,6 +34,8 @@ model Tenant {
   aiActions   AiAction[]
   reports     Report[]
   assetGroups AssetGroup[]
+  tags        Tag[]
+  scopes      Scope[]
 
   @@map("tenants")
 }
@@ -58,13 +60,15 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userRoles   UserRole[]
-  createdRoles Role[]       @relation("RoleCreator")
-  apiKeys     ApiKey[]      @relation("ApiKeyCreator")
-  invitedBy   Invitation[]  @relation("InvitedBy")
-  auditLogs   AuditLog[]    @relation("AuditActor")
-  assignedRoles UserRole[]  @relation("RoleAssigner")
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles      UserRole[]
+  createdRoles   Role[]          @relation("RoleCreator")
+  apiKeys        ApiKey[]        @relation("ApiKeyCreator")
+  invitedBy      Invitation[]    @relation("InvitedBy")
+  auditLogs      AuditLog[]      @relation("AuditActor")
+  assignedRoles  UserRole[]      @relation("RoleAssigner")
+  userScopes     UserScope[]
+  createdScopes  Scope[]         @relation("ScopeCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -72,64 +76,68 @@ model User {
   @@map("users")
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// RBAC v2: TWO-AXIS MODEL (Functional Roles + Data Scopes)
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── CAPABILITIES (system-wide, not tenant-specific) ─────────────
+// Replaces the flat Permission model. 39 capabilities across 8 modules.
+model Capability {
+  id          String @id // e.g. 'scan.execute' — human-readable, stable
+  module      String // e.g. 'scan', 'asset', 'admin'
+  name        String // e.g. 'Execute Scans'
+  description String?
+  riskLevel   String @default("low") // low, medium, high, critical
+
+  roleCapabilities RoleCapability[]
+
+  @@index([module])
+  @@map("capabilities")
+}
+
 // ─── ROLES ───────────────────────────────────────────────────────
 model Role {
-  id           String   @id @default(uuid())
-  tenantId     String
-  name         String
-  slug         String
-  description  String?
-  isBuiltin    Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  parentRoleId String?
-  createdById  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  slug            String
+  description     String?
+  isBuiltin       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  parentRoleId    String?
+  maxAssignments  Int?     // e.g. 2 for Platform Admin
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parentRole  Role?           @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
-  childRoles  Role[]          @relation("RoleHierarchy")
-  createdBy   User?           @relation("RoleCreator", fields: [createdById], references: [id])
-  permissions RolePermission[]
-  userRoles   UserRole[]
-  apiKeys     ApiKey[]
-  invitations Invitation[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentRole       Role?             @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  childRoles       Role[]            @relation("RoleHierarchy")
+  createdBy        User?             @relation("RoleCreator", fields: [createdById], references: [id])
+  roleCapabilities RoleCapability[]
+  userRoles        UserRole[]
+  apiKeys          ApiKey[]
+  invitations      Invitation[]
 
   @@unique([tenantId, slug])
   @@map("roles")
 }
 
-// ─── PERMISSIONS ─────────────────────────────────────────────────
-model Permission {
-  id          String @id @default(uuid())
-  module      String
-  resource    String
-  action      String
-  description String?
-
-  rolePermissions RolePermission[]
-
-  @@unique([module, resource, action])
-  @@map("permissions")
-}
-
-// ─── ROLE <-> PERMISSION MAPPING ─────────────────────────────────
-model RolePermission {
-  id           String  @id @default(uuid())
+// ─── ROLE <-> CAPABILITY MAPPING (v2) ────────────────────────────
+model RoleCapability {
   roleId       String
-  permissionId String
-  scope        String  @default("{}") // JSON for ABAC scoping
-  granted      Boolean @default(true) // true = allow, false = explicit deny
+  capabilityId String
+  granted      Boolean @default(true) // false = explicit deny (override layer)
 
   role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  capability Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
 
-  @@unique([roleId, permissionId])
+  @@id([roleId, capabilityId])
   @@index([roleId])
-  @@map("role_permissions")
+  @@map("role_capabilities")
 }
 
-// ─── USER <-> ROLE MAPPING ───────────────────────────────────────
+// ─── USER <-> ROLE MAPPING (many-to-many, cumulative) ────────────
 model UserRole {
   id         String    @id @default(uuid())
   userId     String
@@ -146,6 +154,82 @@ model UserRole {
   @@index([userId])
   @@map("user_roles")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA SCOPING (Axis 2) — Tag-Based Access
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── TAGS ────────────────────────────────────────────────────────
+model Tag {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String   // e.g. 'env', 'region', 'team'
+  value     String   // e.g. 'production', 'mumbai'
+  color     String?  // hex color for UI
+  createdAt DateTime @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetTags AssetTag[]
+
+  @@unique([tenantId, key, value])
+  @@index([tenantId, key])
+  @@map("tags")
+}
+
+// ─── ASSET <-> TAG MAPPING ───────────────────────────────────────
+model AssetTag {
+  assetId   String
+  tagId     String
+  appliedBy String   @default("manual") // manual, auto_rule, discovery
+  appliedAt DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([assetId, tagId])
+  @@index([assetId])
+  @@index([tagId])
+  @@map("asset_tags")
+}
+
+// ─── SCOPES (named tag filter sets) ──────────────────────────────
+model Scope {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  tagFilter   String   @default("{}") // JSON: {"env": ["production"], "region": ["mumbai"]}
+  isGlobal    Boolean  @default(false) // true = matches all assets
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  User?       @relation("ScopeCreator", fields: [createdById], references: [id])
+  userScopes UserScope[]
+
+  @@unique([tenantId, name])
+  @@map("scopes")
+}
+
+// ─── USER <-> SCOPE MAPPING (many-to-many, union) ────────────────
+model UserScope {
+  userId     String
+  scopeId    String
+  assignedBy String?
+  assignedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope Scope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, scopeId])
+  @@index([userId])
+  @@map("user_scopes")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXISTING MODELS (unchanged from v1)
+// ═══════════════════════════════════════════════════════════════════
 
 // ─── API KEYS ────────────────────────────────────────────────────
 model ApiKey {
@@ -196,10 +280,10 @@ model AuditLog {
 
 // ─── INVITATIONS ─────────────────────────────────────────────────
 model Invitation {
-  id        String   @id @default(uuid())
-  tenantId  String
-  email     String
-  roleId    String
+  id          String   @id @default(uuid())
+  tenantId    String
+  email       String
+  roleId      String
   invitedById String
   tokenHash   String
   tokenPrefix String?  // first 8 chars for efficient lookup
@@ -242,7 +326,7 @@ model Asset {
   os           String?
   criticality  String   @default("medium") // critical, high, medium, low
   status       String   @default("active") // active, inactive, decommissioned
-  tags         String   @default("[]") // JSON array
+  tags         String   @default("[]") // JSON array (legacy, kept for backward compat)
   metadata     String   @default("{}") // JSON
   groupId      String?
   lastScanAt   DateTime?
@@ -252,6 +336,7 @@ model Asset {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   group       AssetGroup? @relation(fields: [groupId], references: [id])
   scanResults ScanResult[]
+  assetTags   AssetTag[]
 
   @@index([tenantId])
   @@map("assets")
@@ -331,7 +416,7 @@ model ComplianceControl {
   title         String
   description   String?
   category      String?  // e.g., "Data Protection", "Access Control"
-  status        String   @default("not_assessed") // compliant, partially_compliant, non_compliant, not_assessed, not_applicable
+  status        String   @default("not_assessed")
   evidence      String   @default("[]") // JSON array of evidence items
   notes         String?
   lastAssessedAt DateTime?
@@ -399,7 +484,7 @@ model SiemAlert {
   severity     String    // critical, high, medium, low
   title        String
   description  String?
-  status       String    @default("open") // open, acknowledged, investigating, resolved, false_positive
+  status       String    @default("open")
   assignedTo   String?
   acknowledgedAt DateTime?
   resolvedAt   DateTime?
@@ -441,7 +526,7 @@ model AiAction {
   title        String
   description  String?
   riskLevel    String    @default("medium") // low, medium, high
-  status       String    @default("pending") // pending, approved, rejected, executed, expired, failed
+  status       String    @default("pending")
   config       String    @default("{}") // JSON action configuration
   approvedById String?
   approvedAt   DateTime?
@@ -465,7 +550,7 @@ model Report {
   type        String    // vulnerability, compliance, executive, technical, custom
   template    String?   // template identifier
   config      String    @default("{}") // JSON report configuration
-  status      String    @default("generating") // generating, completed, failed
+  status      String    @default("generating")
   data        String    @default("{}") // JSON report data
   createdById String?
   scheduleCron String?
