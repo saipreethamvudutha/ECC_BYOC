@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { sendInvitationEmail, getAppUrl } from "@/lib/email";
 import * as bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 
@@ -71,9 +72,12 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // Create invitation record
+  // Create invitation record with token
   const token = uuid();
   const tokenHash = await bcrypt.hash(token, 10);
+  const tokenPrefix = token.substring(0, 8);
+  const invitationExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+
   await prisma.invitation.create({
     data: {
       tenantId: session.tenantId,
@@ -81,9 +85,34 @@ export async function POST(request: NextRequest) {
       roleId,
       invitedById: session.id,
       tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      tokenPrefix,
+      expiresAt: invitationExpiry,
     },
   });
+
+  // Build invitation link
+  const appUrl = getAppUrl();
+  const inviteLink = `${appUrl}/accept-invitation?token=${token}`;
+
+  // Send invitation email
+  let emailWarning: string | undefined;
+  try {
+    const emailResult = await sendInvitationEmail({
+      to: email,
+      inviteeName: name,
+      inviterName: session.name,
+      orgName: session.tenantName,
+      roleName: role.name,
+      inviteLink,
+      expiresAt: invitationExpiry,
+    });
+
+    if (!emailResult.success) {
+      emailWarning = "Invitation created but email delivery failed. Share the link manually.";
+    }
+  } catch {
+    emailWarning = "Invitation created but email service unavailable. Share the link manually.";
+  }
 
   // Audit log
   await prisma.auditLog.create({
@@ -95,7 +124,11 @@ export async function POST(request: NextRequest) {
       resourceType: "user",
       resourceId: user.id,
       result: "success",
-      details: JSON.stringify({ email, role: role.name }),
+      details: JSON.stringify({
+        email,
+        role: role.name,
+        emailSent: !emailWarning,
+      }),
     },
   });
 
@@ -107,6 +140,10 @@ export async function POST(request: NextRequest) {
       status: user.status,
       role: role.name,
     },
-    message: "User invited successfully",
+    inviteLink,
+    message: emailWarning
+      ? "User invited. Email delivery failed — share the link below."
+      : "User invited successfully. Invitation email sent.",
+    warning: emailWarning,
   });
 }

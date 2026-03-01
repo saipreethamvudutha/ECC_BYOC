@@ -21,8 +21,13 @@ import {
   Mail,
   Clock,
   Loader2,
+  RefreshCw,
+  XCircle,
+  Copy,
+  Check,
+  Link2,
 } from "lucide-react";
-import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 interface RoleOption {
   id: string;
@@ -39,7 +44,15 @@ interface UserItem {
   mfaEnabled: boolean;
   lastLoginAt: string | null;
   avatarUrl: string | null;
+  department: string | null;
+  phone: string | null;
   roles: { id: string; name: string; slug: string }[];
+  invitation: {
+    id: string;
+    status: string;
+    expiresAt: string;
+    createdAt: string;
+  } | null;
   createdAt: string;
 }
 
@@ -66,6 +79,9 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [inviteForm, setInviteForm] = useState({ name: "", email: "", roleId: "" });
   const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState<{ link: string; message: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function loadUsers() {
     fetch("/api/users")
@@ -79,7 +95,7 @@ export default function UsersPage() {
     loadUsers();
     fetch("/api/roles")
       .then((res) => res.json())
-      .then((data: { id: string; name: string; slug: string }[]) => setRoles(data))
+      .then((data: RoleOption[]) => setRoles(data))
       .catch(console.error);
   }, []);
 
@@ -87,6 +103,7 @@ export default function UsersPage() {
     if (!inviteForm.name || !inviteForm.email || !inviteForm.roleId) return;
     setInviting(true);
     setInviteError("");
+    setInviteSuccess(null);
 
     try {
       const res = await fetch("/api/users/invite", {
@@ -101,7 +118,7 @@ export default function UsersPage() {
         return;
       }
 
-      setShowInvite(false);
+      setInviteSuccess({ link: data.inviteLink, message: data.message });
       setInviteForm({ name: "", email: "", roleId: "" });
       loadUsers();
     } catch {
@@ -109,6 +126,59 @@ export default function UsersPage() {
     } finally {
       setInviting(false);
     }
+  }
+
+  async function handleResend(invitationId: string) {
+    setActionLoading(invitationId);
+    try {
+      const res = await fetch("/api/users/invite/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId }),
+      });
+      if (res.ok) {
+        loadUsers();
+      }
+    } catch {
+      console.error("Failed to resend invitation");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleRevoke(invitationId: string) {
+    setActionLoading(invitationId);
+    try {
+      const res = await fetch("/api/users/invite/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId }),
+      });
+      if (res.ok) {
+        loadUsers();
+      }
+    } catch {
+      console.error("Failed to revoke invitation");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function getInvitationStatusInfo(user: UserItem) {
+    if (!user.invitation || user.status !== "invited") return null;
+    const inv = user.invitation;
+    const isExpired = new Date(inv.expiresAt) < new Date();
+
+    if (inv.status === "revoked") return { label: "Revoked", variant: "destructive" as const };
+    if (isExpired || inv.status === "expired") return { label: "Expired", variant: "secondary" as const };
+    if (inv.status === "pending") return { label: "Pending", variant: "warning" as const };
+    return null;
   }
 
   if (loading) {
@@ -166,7 +236,7 @@ export default function UsersPage() {
             className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
           />
         </div>
-        <Button onClick={() => setShowInvite(true)}>
+        <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setInviteError(""); }}>
           <UserPlus className="w-4 h-4 mr-2" />
           Invite User
         </Button>
@@ -181,7 +251,7 @@ export default function UsersPage() {
         </CardHeader>
         <CardContent>
           {/* Table Header */}
-          <div className="hidden md:grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1.5fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
             <span>User</span>
             <span>Email</span>
             <span>Roles</span>
@@ -190,65 +260,122 @@ export default function UsersPage() {
             <span>Status</span>
           </div>
           <div className="space-y-1">
-            {filteredUsers.map((user) => (
-              <div
-                key={user.id}
-                className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
-              >
-                {/* User Name */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-bold text-white">
-                      {user.name.charAt(0).toUpperCase()}
+            {filteredUsers.map((user) => {
+              const invStatus = getInvitationStatusInfo(user);
+              const isInvitePending = user.status === "invited" && user.invitation?.status === "pending" && new Date(user.invitation.expiresAt) > new Date();
+
+              return (
+                <div
+                  key={user.id}
+                  className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1.5fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
+                >
+                  {/* User Name */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-white">
+                        {user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                      {user.department && (
+                        <span className="text-[10px] text-slate-500">{user.department}</span>
+                      )}
+                      {user.mfaEnabled && (
+                        <span className="text-[10px] text-emerald-400 ml-2">MFA</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-400 truncate">{user.email}</p>
+                  </div>
+
+                  {/* Roles */}
+                  <div className="flex gap-1 flex-wrap">
+                    {user.roles.map((role) => (
+                      <Badge key={role.id} variant="outline" className="text-[10px]">
+                        {role.name}
+                      </Badge>
+                    ))}
+                    {user.roles.length === 0 && (
+                      <span className="text-xs text-slate-500">No roles</span>
+                    )}
+                  </div>
+
+                  {/* Auth Provider */}
+                  <div>
+                    <span className="text-xs text-slate-400">
+                      {authProviderLabels[user.authProvider] || user.authProvider}
                     </span>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                    {user.mfaEnabled && (
-                      <span className="text-[10px] text-emerald-400">MFA enabled</span>
+
+                  {/* Last Login */}
+                  <div>
+                    <span className="text-xs text-slate-500">
+                      {user.lastLoginAt ? formatRelativeTime(user.lastLoginAt) : "Never"}
+                    </span>
+                  </div>
+
+                  {/* Status + Actions */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={statusVariants[user.status] || "secondary"}>
+                      {user.status}
+                    </Badge>
+
+                    {/* Invitation status detail */}
+                    {invStatus && invStatus.label !== "Pending" && (
+                      <Badge variant={invStatus.variant} className="text-[10px]">
+                        {invStatus.label}
+                      </Badge>
+                    )}
+
+                    {/* Expiry info for pending invites */}
+                    {isInvitePending && user.invitation && (
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Expires {formatRelativeTime(user.invitation.expiresAt)}
+                      </span>
+                    )}
+
+                    {/* Action buttons for invited users */}
+                    {user.invitation && user.status === "invited" && (
+                      <div className="flex items-center gap-1 ml-auto">
+                        {user.invitation.status === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-cyan-400 hover:text-cyan-300"
+                            disabled={actionLoading === user.invitation.id}
+                            onClick={() => handleResend(user.invitation!.id)}
+                          >
+                            {actionLoading === user.invitation.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3 h-3 mr-1" />
+                            )}
+                            Resend
+                          </Button>
+                        )}
+                        {user.invitation.status === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
+                            disabled={actionLoading === user.invitation.id}
+                            onClick={() => handleRevoke(user.invitation!.id)}
+                          >
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Revoke
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
-
-                {/* Email */}
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-400 truncate">{user.email}</p>
-                </div>
-
-                {/* Roles */}
-                <div className="flex gap-1 flex-wrap">
-                  {user.roles.map((role) => (
-                    <Badge key={role.id} variant="outline" className="text-[10px]">
-                      {role.name}
-                    </Badge>
-                  ))}
-                  {user.roles.length === 0 && (
-                    <span className="text-xs text-slate-500">No roles</span>
-                  )}
-                </div>
-
-                {/* Auth Provider */}
-                <div>
-                  <span className="text-xs text-slate-400">
-                    {authProviderLabels[user.authProvider] || user.authProvider}
-                  </span>
-                </div>
-
-                {/* Last Login */}
-                <div>
-                  <span className="text-xs text-slate-500">
-                    {user.lastLoginAt ? formatRelativeTime(user.lastLoginAt) : "Never"}
-                  </span>
-                </div>
-
-                {/* Status */}
-                <div>
-                  <Badge variant={statusVariants[user.status] || "secondary"}>
-                    {user.status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {filteredUsers.length === 0 && (
               <div className="text-center py-12 text-slate-500">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -269,76 +396,126 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Invite User</DialogTitle>
             <DialogDescription>
-              Send an invitation to join your organization.
+              Send an invitation to join your organization. They&apos;ll receive an email with an onboarding link.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Full Name</label>
-              <Input
-                placeholder="John Smith"
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
-              />
-            </div>
+          {inviteSuccess ? (
+            // Success state — show invite link
+            <div className="space-y-4 py-2">
+              <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Check className="w-5 h-5 text-emerald-400" />
+                  <p className="text-sm font-medium text-emerald-400">{inviteSuccess.message}</p>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Email Address</label>
-              <Input
-                type="email"
-                placeholder="john@company.com"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Role</label>
               <div className="space-y-2">
-                {roles.map((role) => (
-                  <button
-                    key={role.id}
-                    onClick={() => setInviteForm({ ...inviteForm, roleId: role.id })}
-                    className={cn(
-                      "w-full p-3 rounded-lg border text-left text-sm transition-all",
-                      inviteForm.roleId === role.id
-                        ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
-                        : "border-slate-700 text-slate-400 hover:border-slate-600"
-                    )}
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <Link2 className="w-4 h-4" />
+                  Invitation Link
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={inviteSuccess.link}
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700 text-xs text-slate-300 font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(inviteSuccess.link)}
                   >
-                    {role.name}
-                  </button>
-                ))}
+                    {copied ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Share this link with the invitee if they didn&apos;t receive the email.
+                </p>
               </div>
+
+              <DialogFooter>
+                <Button onClick={() => { setShowInvite(false); setInviteSuccess(null); }}>
+                  Done
+                </Button>
+              </DialogFooter>
             </div>
+          ) : (
+            // Invite form
+            <>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Full Name</label>
+                  <Input
+                    placeholder="John Smith"
+                    value={inviteForm.name}
+                    onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
+                  />
+                </div>
 
-            {inviteError && (
-              <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                {inviteError}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Email Address</label>
+                  <Input
+                    type="email"
+                    placeholder="john@company.com"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Role</label>
+                  <div className="space-y-2">
+                    {roles.map((role) => (
+                      <button
+                        key={role.id}
+                        onClick={() => setInviteForm({ ...inviteForm, roleId: role.id })}
+                        className={cn(
+                          "w-full p-3 rounded-lg border text-left text-sm transition-all",
+                          inviteForm.roleId === role.id
+                            ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
+                            : "border-slate-700 text-slate-400 hover:border-slate-600"
+                        )}
+                      >
+                        {role.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {inviteError && (
+                  <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                    {inviteError}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
-            <Button
-              onClick={handleInvite}
-              disabled={inviting || !inviteForm.name || !inviteForm.email || !inviteForm.roleId}
-            >
-              {inviting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Inviting...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  Send Invitation
-                </>
-              )}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
+                <Button
+                  onClick={handleInvite}
+                  disabled={inviting || !inviteForm.name || !inviteForm.email || !inviteForm.roleId}
+                >
+                  {inviting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4" />
+                      Send Invitation
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

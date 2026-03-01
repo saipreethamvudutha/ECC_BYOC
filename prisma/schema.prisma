@@ -53,6 +53,8 @@ model User {
   lastLoginAt    DateTime?
   lastLoginIp    String?
   avatarUrl      String?
+  department     String?
+  phone          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -199,15 +201,17 @@ model Invitation {
   email     String
   roleId    String
   invitedById String
-  tokenHash String
-  status    String   @default("pending") // pending, accepted, expired, revoked
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  tokenHash   String
+  tokenPrefix String?  // first 8 chars for efficient lookup
+  status      String   @default("pending") // pending, accepted, expired, revoked
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
 
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   role      Role   @relation(fields: [roleId], references: [id])
   invitedBy User   @relation("InvitedBy", fields: [invitedById], references: [id])
 
+  @@index([tokenPrefix, status])
   @@map("invitations")
 }
 
