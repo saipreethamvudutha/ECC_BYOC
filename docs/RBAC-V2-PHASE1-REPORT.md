@@ -41,7 +41,7 @@ Phase 1 replaces the v1 single-layer RBAC model (102 flat permissions merged wit
 | File | Changes |
 |------|---------|
 | `prisma/schema.prisma` | Removed `Permission`/`RolePermission`, added `Capability`, `RoleCapability`, `Tag`, `AssetTag`, `Scope`, `UserScope`; added `maxAssignments` to Role |
-| `prisma/seed.ts` | Complete rewrite for v2: seeds 42 capabilities, 7 roles, 15 tags, 6 scopes, 4 users with role+scope assignments |
+| `prisma/seed.ts` | Production bootstrap: seeds 42 capabilities, 7 roles, 1 global scope, 1 Exargen Super Admin |
 | `src/lib/rbac.ts` | Complete rewrite: two-axis engine with capability check + scope check, v1 backward-compatibility mapping, profile caching |
 | `src/lib/auth.ts` | Added `checkCurrentUserCapability()`, `getCurrentUserCapabilities()` |
 | `src/app/api/roles/route.ts` | Returns `capabilityCount` instead of `permissionCount` |
@@ -96,14 +96,13 @@ The v2 RBAC engine includes a **v1-to-v2 permission mapping layer** in `rbac.ts`
 
 ---
 
-## Demo Users & Credentials
+## Production Credentials
 
 | User | Email | Password | Role | Scope |
 |------|-------|----------|------|-------|
-| Rahul Sharma | admin@acme.co | Admin123! | Platform Administrator | Global (implicit) |
-| Priya Mehta | priya@acme.co | Admin123! | Security Analyst | Production Mumbai |
-| Amit Kumar | amit@acme.co | Admin123! | Auditor | Global |
-| Sara Joshi | sara@acme.co | Admin123! | Remediation User | Payments Team |
+| Exargen Admin | admin@exargen.com | Admin123! | Platform Administrator | Global |
+
+> **Note:** Previous demo seed data (4 Acme users, 9 assets, compliance frameworks, scans, SIEM events) is preserved in git history at commit `e8d8f22` and can be restored with `git show e8d8f22:prisma/seed.ts > prisma/seed.ts`.
 
 ---
 
