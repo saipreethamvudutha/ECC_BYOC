@@ -43,16 +43,19 @@ interface InvitationData {
   expiresAt: string;
 }
 
-interface PermissionEntry {
-  resource: string;
-  action: string;
+interface CapabilityEntry {
+  id: string;
+  name: string;
   description: string;
+  riskLevel: string;
+  granted: boolean;
 }
 
 interface PermissionsData {
   role: { name: string; description: string };
-  permissionsByModule: Record<string, PermissionEntry[]>;
-  totalPermissions: number;
+  capabilitiesByModule: Record<string, CapabilityEntry[]>;
+  totalCapabilities: number;
+  totalAvailable: number;
 }
 
 interface OnboardingState {
@@ -880,7 +883,7 @@ function StepPermissions({
   }
 
   const modules = permissions
-    ? Object.entries(permissions.permissionsByModule)
+    ? Object.entries(permissions.capabilitiesByModule)
     : [];
   const moduleCount = modules.length;
 
@@ -911,7 +914,7 @@ function StepPermissions({
         )}
         {permissions && (
           <p className="text-xs text-slate-500">
-            {permissions.totalPermissions} permissions across {moduleCount}{" "}
+            {permissions.totalCapabilities} capabilities across {moduleCount}{" "}
             module{moduleCount !== 1 ? "s" : ""}
           </p>
         )}
@@ -937,7 +940,7 @@ function StepPermissions({
                       {mod.replace(/_/g, " ")}
                     </Badge>
                     <span className="text-xs text-slate-500">
-                      {perms.length} permission{perms.length !== 1 ? "s" : ""}
+                      {perms.filter((p: CapabilityEntry) => p.granted).length} capability{perms.filter((p: CapabilityEntry) => p.granted).length !== 1 ? "ies" : "y"}
                     </span>
                   </div>
                   {isOpen ? (
@@ -949,18 +952,29 @@ function StepPermissions({
 
                 {isOpen && (
                   <div className="px-4 pb-3 space-y-2">
-                    {perms.map((p, idx) => (
+                    {perms.map((p) => (
                       <div
-                        key={idx}
+                        key={p.id}
                         className="flex items-start gap-2 text-sm pl-2 border-l-2 border-slate-700/50"
                       >
-                        <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                        <Check className={cn(
+                          "w-3.5 h-3.5 shrink-0 mt-0.5",
+                          p.granted ? "text-cyan-400" : "text-red-400"
+                        )} />
                         <div>
                           <span className="text-slate-300 font-medium">
-                            {p.action}
+                            {p.name}
                           </span>
                           <span className="text-slate-600 mx-1.5">&middot;</span>
-                          <span className="text-slate-500">{p.resource}</span>
+                          <span className="text-slate-500 font-mono text-xs">{p.id}</span>
+                          {p.riskLevel !== "low" && (
+                            <Badge
+                              variant={p.riskLevel === "critical" ? "destructive" : "secondary"}
+                              className="ml-2 text-[10px] px-1.5 py-0"
+                            >
+                              {p.riskLevel}
+                            </Badge>
+                          )}
                           {p.description && (
                             <p className="text-xs text-slate-600 mt-0.5">
                               {p.description}
