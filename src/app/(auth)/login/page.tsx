@@ -74,7 +74,7 @@ export default function LoginPage() {
               <label className="text-sm font-medium text-slate-300">Email</label>
               <Input
                 type="email"
-                placeholder="admin@acme.co"
+                placeholder="admin@exargen.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -123,7 +123,7 @@ export default function LoginPage() {
 
           <div className="mt-6 pt-6 border-t border-slate-800">
             <p className="text-xs text-slate-500 text-center">
-              Demo credentials: admin@acme.co / Admin123!
+              Login: admin@exargen.com / Admin123!
             </p>
           </div>
         </div>
