@@ -34,8 +34,9 @@ model Tenant {
   aiActions   AiAction[]
   reports     Report[]
   assetGroups AssetGroup[]
-  tags        Tag[]
-  scopes      Scope[]
+  tags         Tag[]
+  scopes       Scope[]
+  autoTagRules AutoTagRule[]
 
   @@map("tenants")
 }
@@ -67,8 +68,9 @@ model User {
   invitedBy      Invitation[]    @relation("InvitedBy")
   auditLogs      AuditLog[]      @relation("AuditActor")
   assignedRoles  UserRole[]      @relation("RoleAssigner")
-  userScopes     UserScope[]
-  createdScopes  Scope[]         @relation("ScopeCreator")
+  userScopes          UserScope[]
+  createdScopes       Scope[]         @relation("ScopeCreator")
+  createdAutoTagRules AutoTagRule[]   @relation("AutoTagRuleCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -168,8 +170,9 @@ model Tag {
   color     String?  // hex color for UI
   createdAt DateTime @default(now())
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assetTags AssetTag[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetTags    AssetTag[]
+  autoTagRules AutoTagRule[]
 
   @@unique([tenantId, key, value])
   @@index([tenantId, key])
@@ -225,6 +228,29 @@ model UserScope {
   @@id([userId, scopeId])
   @@index([userId])
   @@map("user_scopes")
+}
+
+// ─── AUTO-TAG RULES (Phase 2) ──────────────────────────────────
+model AutoTagRule {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  condition   String   @default("{}") // JSON: {"field":"type","operator":"equals","value":"server"}
+  tagId       String
+  isActive    Boolean  @default(true)
+  priority    Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tag       Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("AutoTagRuleCreator", fields: [createdById], references: [id])
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive])
+  @@map("auto_tag_rules")
 }
 
 // ═══════════════════════════════════════════════════════════════════
