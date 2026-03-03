@@ -31,6 +31,11 @@ export async function PATCH(
 
   const { id } = await params;
 
+  // M4: Validate UUID format
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid user ID format" }, { status: 400 });
+  }
+
   // Verify target user belongs to same tenant
   const targetUser = await prisma.user.findFirst({
     where: { id, tenantId: session.tenantId },

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * GET /api/scopes/[id]/preview
@@ -29,6 +30,10 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   const scope = await prisma.scope.findFirst({
     where: { id, tenantId: session.tenantId },

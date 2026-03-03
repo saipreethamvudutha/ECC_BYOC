@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
 
@@ -29,6 +30,10 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   // Verify user belongs to same tenant
   const targetUser = await prisma.user.findFirst({
@@ -85,6 +90,11 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
+
   const { scopeId } = await request.json();
 
   if (!scopeId) {

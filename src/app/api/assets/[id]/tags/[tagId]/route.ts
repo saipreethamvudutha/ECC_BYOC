@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 export async function DELETE(
   request: NextRequest,
@@ -21,6 +22,13 @@ export async function DELETE(
   }
 
   const { id, tagId } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
+  if (!isValidUUID(tagId)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   // Verify asset belongs to tenant
   const asset = await prisma.asset.findFirst({

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { CAPABILITIES } from "@/lib/capabilities";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * POST /api/roles/[roleId]/clone — Clone an existing role
@@ -28,6 +29,10 @@ export async function POST(
   }
 
   const { roleId } = await params;
+
+  if (!isValidUUID(roleId)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   // Find source role with its capabilities
   const sourceRole = await prisma.role.findFirst({

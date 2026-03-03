@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
 
@@ -29,6 +30,10 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   const scope = await prisma.scope.findFirst({
     where: { id, tenantId: session.tenantId },
@@ -89,6 +94,10 @@ export async function PATCH(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   const scope = await prisma.scope.findFirst({
     where: { id, tenantId: session.tenantId },
@@ -185,6 +194,10 @@ export async function DELETE(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   const scope = await prisma.scope.findFirst({
     where: { id, tenantId: session.tenantId },

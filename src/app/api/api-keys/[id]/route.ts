@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { rbac } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 import crypto from "crypto";
 import * as bcrypt from "bcryptjs";
 
@@ -32,6 +33,9 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+    }
 
     // Find the API key and verify tenant ownership
     const apiKey = await prisma.apiKey.findUnique({
@@ -105,6 +109,9 @@ export async function PATCH(
     }
 
     const { id } = await params;
+    if (!isValidUUID(id)) {
+      return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+    }
 
     // Find the API key and verify tenant ownership
     const apiKey = await prisma.apiKey.findUnique({

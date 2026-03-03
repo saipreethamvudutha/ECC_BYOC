@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
 import { v4 as uuid } from "uuid";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * GET /api/users/[id]/roles
@@ -28,6 +29,10 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
 
   // Verify user belongs to same tenant
   const targetUser = await prisma.user.findFirst({
@@ -105,6 +110,11 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  if (!isValidUUID(id)) {
+    return NextResponse.json({ error: "Invalid ID format" }, { status: 400 });
+  }
+
   const body = await request.json();
   const { roleId } = body as { roleId?: string };
 
