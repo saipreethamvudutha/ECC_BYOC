@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { rbac } from "@/lib/rbac";
 import { CAPABILITIES } from "@/lib/capabilities";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * GET /api/roles/[roleId]/permissions
@@ -25,6 +26,9 @@ export async function GET(
   }
 
   const { roleId } = await params;
+  if (!isValidUUID(roleId)) {
+    return NextResponse.json({ error: "Invalid role ID format" }, { status: 400 });
+  }
 
   const role = await prisma.role.findFirst({
     where: { id: roleId, tenantId: session.tenantId },

@@ -41,6 +41,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid or expired invitation" }, { status: 404 });
   }
 
+  // M11: Explicit expiry validation (defense-in-depth)
+  if (invitation.expiresAt && invitation.expiresAt < new Date()) {
+    return NextResponse.json({ error: "This invitation has expired" }, { status: 410 });
+  }
+
   return NextResponse.json({
     invitation: {
       id: invitation.id,
@@ -89,6 +94,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Invalid or expired invitation" },
         { status: 404 }
+      );
+    }
+
+    // M11: Explicit expiry validation (defense-in-depth)
+    if (invitation.expiresAt && invitation.expiresAt < new Date()) {
+      return NextResponse.json(
+        { error: "This invitation has expired" },
+        { status: 410 }
       );
     }
 

@@ -87,6 +87,15 @@ export default function SecurityDashboardPage() {
   const [integrityChecking, setIntegrityChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // M10: Track which data sources loaded successfully
+  const [dataLoadStatus, setDataLoadStatus] = useState({
+    auditEvents: true,
+    failedLogins: true,
+    sessions: true,
+    apiKeys: true,
+    integrity: true,
+  });
+
   const fetchSecurityData = useCallback(async () => {
     try {
       const twentyFourHoursAgo = new Date(
@@ -133,6 +142,15 @@ export default function SecurityDashboardPage() {
         const data = await integrityRes.value.json();
         setIntegrity(data);
       }
+
+      // M10: Track data source availability for accurate score
+      setDataLoadStatus({
+        auditEvents: eventsRes.status === "fulfilled" && eventsRes.value.ok,
+        failedLogins: failedLoginsRes.status === "fulfilled" && failedLoginsRes.value.ok,
+        sessions: sessionsRes.status === "fulfilled" && sessionsRes.value.ok,
+        apiKeys: apiKeysRes.status === "fulfilled" && apiKeysRes.value.ok,
+        integrity: integrityRes.status === "fulfilled" && integrityRes.value.ok,
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load security data"
@@ -160,30 +178,26 @@ export default function SecurityDashboardPage() {
     }
   };
 
-  // Compute security score
+  // M10: Compute security score with data availability tracking
   const computeSecurityScore = () => {
     let score = 0;
-    const breakdown: { label: string; points: number; earned: boolean }[] = [];
+    let maxScore = 0;
+    const breakdown: { label: string; points: number; earned: boolean; unavailable: boolean }[] = [];
 
     // Audit integrity: +30
+    const integrityAvailable = dataLoadStatus.integrity;
     const integrityValid = integrity?.valid === true;
-    breakdown.push({
-      label: "Audit Log Integrity",
-      points: 30,
-      earned: integrityValid,
-    });
-    if (integrityValid) score += 30;
+    breakdown.push({ label: "Audit Log Integrity", points: 30, earned: integrityValid, unavailable: !integrityAvailable });
+    if (integrityAvailable) { maxScore += 30; if (integrityValid) score += 30; }
 
     // No failed logins in 24h: +25
+    const failedLoginsAvailable = dataLoadStatus.failedLogins;
     const noFailedLogins = failedLoginCount === 0;
-    breakdown.push({
-      label: "No Failed Logins (24h)",
-      points: 25,
-      earned: noFailedLogins,
-    });
-    if (noFailedLogins) score += 25;
+    breakdown.push({ label: "No Failed Logins (24h)", points: 25, earned: noFailedLogins, unavailable: !failedLoginsAvailable });
+    if (failedLoginsAvailable) { maxScore += 25; if (noFailedLogins) score += 25; }
 
     // All API keys have >30 days before expiry: +20
+    const apiKeysAvailable = dataLoadStatus.apiKeys;
     const activeApiKeys = apiKeys.filter((k) => k.isActive);
     const allKeysHealthy =
       activeApiKeys.length === 0 ||
@@ -191,37 +205,29 @@ export default function SecurityDashboardPage() {
         const diff = new Date(k.expiresAt).getTime() - Date.now();
         return diff > 30 * 24 * 60 * 60 * 1000;
       });
-    breakdown.push({
-      label: "API Keys Not Expiring",
-      points: 20,
-      earned: allKeysHealthy,
-    });
-    if (allKeysHealthy) score += 20;
+    breakdown.push({ label: "API Keys Not Expiring", points: 20, earned: allKeysHealthy, unavailable: !apiKeysAvailable });
+    if (apiKeysAvailable) { maxScore += 20; if (allKeysHealthy) score += 20; }
 
     // Active sessions reasonable (<10 per user average): +15
+    const sessionsAvailable = dataLoadStatus.sessions;
     const uniqueUsers = new Set(activeSessions.map((s) => s.userId)).size;
-    const avgSessions =
-      uniqueUsers > 0 ? activeSessions.length / uniqueUsers : 0;
+    const avgSessions = uniqueUsers > 0 ? activeSessions.length / uniqueUsers : 0;
     const sessionsReasonable = avgSessions < 10;
-    breakdown.push({
-      label: "Session Count Normal",
-      points: 15,
-      earned: sessionsReasonable,
-    });
-    if (sessionsReasonable) score += 15;
+    breakdown.push({ label: "Session Count Normal", points: 15, earned: sessionsReasonable, unavailable: !sessionsAvailable });
+    if (sessionsAvailable) { maxScore += 15; if (sessionsReasonable) score += 15; }
 
     // Security headers active (always true): +10
-    breakdown.push({
-      label: "Security Headers Active",
-      points: 10,
-      earned: true,
-    });
+    maxScore += 10;
+    breakdown.push({ label: "Security Headers Active", points: 10, earned: true, unavailable: false });
     score += 10;
 
-    return { score, breakdown };
+    // Normalize score to percentage of available checks
+    const normalizedScore = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+    return { score: normalizedScore, rawScore: score, maxScore, breakdown };
   };
 
-  const { score, breakdown } = computeSecurityScore();
+  const { score, rawScore, maxScore, breakdown } = computeSecurityScore();
+  const unavailableChecks = breakdown.filter((b) => b.unavailable).length;
 
   const scoreColor =
     score >= 80
@@ -346,7 +352,7 @@ export default function SecurityDashboardPage() {
                     {score}
                   </span>
                   <span className="text-[10px] text-slate-400 -mt-0.5">
-                    / 100
+                    / {maxScore < 100 ? maxScore : 100}
                   </span>
                 </div>
               </div>
@@ -361,28 +367,42 @@ export default function SecurityDashboardPage() {
                     key={item.label}
                     className="flex items-center gap-2 text-xs"
                   >
-                    {item.earned ? (
+                    {item.unavailable ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                    ) : item.earned ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                     )}
                     <span
                       className={
-                        item.earned ? "text-slate-300" : "text-slate-500"
+                        item.unavailable
+                          ? "text-slate-600 italic"
+                          : item.earned
+                          ? "text-slate-300"
+                          : "text-slate-500"
                       }
                     >
                       {item.label}
+                      {item.unavailable ? " (unable to verify)" : ""}
                     </span>
-                    <span
-                      className={cn(
-                        "font-mono",
-                        item.earned ? "text-emerald-400" : "text-slate-600"
-                      )}
-                    >
-                      +{item.points}
-                    </span>
+                    {!item.unavailable && (
+                      <span
+                        className={cn(
+                          "font-mono",
+                          item.earned ? "text-emerald-400" : "text-slate-600"
+                        )}
+                      >
+                        +{item.points}
+                      </span>
+                    )}
                   </div>
                 ))}
+                {unavailableChecks > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    Score based on {rawScore} of {maxScore} available points ({5 - unavailableChecks}/5 checks evaluated)
+                  </p>
+                )}
               </div>
             </div>
 

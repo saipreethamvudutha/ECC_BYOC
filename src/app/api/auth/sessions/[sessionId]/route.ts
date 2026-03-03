@@ -4,6 +4,7 @@ import { rbac } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { revokeSession } from "@/lib/security";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * DELETE /api/auth/sessions/[sessionId]
@@ -23,6 +24,9 @@ export async function DELETE(
     }
 
     const { sessionId } = await params;
+    if (!isValidUUID(sessionId)) {
+      return NextResponse.json({ error: "Invalid session ID format" }, { status: 400 });
+    }
 
     // Find the target session
     const targetSession = await prisma.session.findUnique({

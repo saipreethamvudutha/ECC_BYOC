@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  Info,
 } from "lucide-react";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
 
@@ -181,10 +182,11 @@ export default function AuditLogPage() {
     );
   });
 
-  // Stats computed from loaded logs
+  // M3: Stats computed from loaded logs (clarified scope)
   const successCount = logs.filter((l) => l.result === "success").length;
   const deniedCount = logs.filter((l) => l.result === "denied").length;
   const errorCount = logs.filter((l) => l.result === "error").length;
+  const hasMoreLogs = totalCount > logs.length;
 
   const results = ["success", "denied", "error"];
   const severities = ["info", "low", "medium", "high", "critical"];
@@ -205,10 +207,10 @@ export default function AuditLogPage() {
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Events", value: totalCount, icon: ScrollText, color: "text-cyan-400" },
-          { label: "Successful", value: successCount, icon: ScrollText, color: "text-emerald-400" },
-          { label: "Denied", value: deniedCount, icon: ScrollText, color: "text-red-400" },
-          { label: "Errors", value: errorCount, icon: ScrollText, color: "text-yellow-400" },
+          { label: "Total Events", value: totalCount, icon: ScrollText, color: "text-cyan-400", subtitle: null as string | null },
+          { label: "Successful", value: successCount, icon: ScrollText, color: "text-emerald-400", subtitle: hasMoreLogs ? "current view" : null },
+          { label: "Denied", value: deniedCount, icon: ScrollText, color: "text-red-400", subtitle: hasMoreLogs ? "current view" : null },
+          { label: "Errors", value: errorCount, icon: ScrollText, color: "text-yellow-400", subtitle: hasMoreLogs ? "current view" : null },
         ].map((stat) => (
           <Card key={stat.label} className="stat-card">
             <CardContent className="p-4 flex items-center gap-4">
@@ -216,11 +218,24 @@ export default function AuditLogPage() {
               <div>
                 <p className="text-2xl font-bold text-white">{stat.value}</p>
                 <p className="text-xs text-slate-400">{stat.label}</p>
+                {stat.subtitle && (
+                  <p className="text-[10px] text-slate-500">{stat.subtitle}</p>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* M3: Clarify loaded vs total scope */}
+      {hasMoreLogs && (
+        <div className="flex items-center gap-2 px-1 text-xs text-slate-500">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>
+            Showing {logs.length} of {totalCount} total entries. Successful / Denied / Error counts reflect loaded data only. Use Export for full results.
+          </span>
+        </div>
+      )}
 
       {/* Integrity Badge + Export */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -265,6 +280,7 @@ export default function AuditLogPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             type="text"
+            aria-label="Search audit logs"
             placeholder="Search by actor, action, or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -297,6 +313,7 @@ export default function AuditLogPage() {
           <Filter className="w-4 h-4 text-slate-500" />
           <span className="text-xs text-slate-500">Category:</span>
           <select
+            aria-label="Filter by category"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"

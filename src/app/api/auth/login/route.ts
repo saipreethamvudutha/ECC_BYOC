@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateUser } from "@/lib/auth";
+import { checkRateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
+      );
+    }
+
+    // H3: Per-IP rate limiting
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || request.headers.get("x-real-ip")
+      || "unknown";
+    const rateCheck = checkRateLimit(`login:${ip}`, LOGIN_RATE_LIMIT);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Please try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateCheck.retryAfterSeconds || 60),
+            "X-RateLimit-Limit": String(LOGIN_RATE_LIMIT.maxRequests),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(Math.ceil(rateCheck.resetAt / 1000)),
+          },
+        }
       );
     }
 

@@ -3,8 +3,15 @@ import { rbac } from "./rbac";
 import * as bcrypt from "bcryptjs";
 import * as jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+import { NextRequest } from "next/server";
 import { createAuditLog } from "./audit";
-import { checkAccountLockout, recordFailedLogin, resetFailedLoginAttempts, createSession as createDbSession } from "./security";
+import { checkAccountLockout, recordFailedLogin, resetFailedLoginAttempts, createSession as createDbSession, cleanupExpiredSessions } from "./security";
+
+// M5: Validate JWT secret strength at module load
+const _AUTH_SECRET = process.env.AUTH_SECRET || "";
+if (_AUTH_SECRET && _AUTH_SECRET.length < 32) {
+  console.warn("[SECURITY WARNING] AUTH_SECRET should be at least 32 characters for production use");
+}
 
 function getJwtSecret(): string {
   const secret = process.env.AUTH_SECRET;
@@ -105,6 +112,9 @@ export async function authenticateUser(
     request,
   });
 
+  // M6: Opportunistic cleanup of expired sessions (fire-and-forget)
+  cleanupExpiredSessions().catch(console.error);
+
   const sessionUser: SessionUser = {
     id: user.id,
     email: user.email,
@@ -158,6 +168,9 @@ export async function getSession(): Promise<SessionUser | null> {
 
   if (!user || user.status !== "active") return null;
 
+  // H2: Reject locked accounts (lockout window still active)
+  if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+
   return {
     id: user.id,
     email: user.email,
@@ -166,6 +179,38 @@ export async function getSession(): Promise<SessionUser | null> {
     tenantName: user.tenant.name,
     tenantPlan: user.tenant.plan,
     roles: user.userRoles.map((ur) => ur.role.slug),
+    avatarUrl: user.avatarUrl,
+  };
+}
+
+/**
+ * Get session from API key authentication.
+ * Call this in API routes that should support API key auth.
+ */
+export async function getApiKeySession(request: NextRequest): Promise<SessionUser | null> {
+  // Lazy import to avoid circular dependency
+  const { authenticateApiKey } = await import("./api-key-auth");
+  const apiKeySession = await authenticateApiKey(request);
+  if (!apiKeySession) return null;
+
+  const user = await prisma.user.findFirst({
+    where: { id: apiKeySession.userId, status: "active" },
+    include: {
+      tenant: true,
+      userRoles: { include: { role: true } },
+    },
+  });
+
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name || "API Key",
+    tenantId: apiKeySession.tenantId,
+    tenantName: user.tenant.name,
+    tenantPlan: user.tenant.plan,
+    roles: user.userRoles.map((ur: { role: { slug: string } }) => ur.role.slug),
     avatarUrl: user.avatarUrl,
   };
 }

@@ -84,6 +84,9 @@ export default function SessionsPage() {
     sessionLabel?: string;
   }>({ open: false, type: "revoke" });
 
+  // M7: Track current browser's user agent to identify current session
+  const [currentUA, setCurrentUA] = useState("");
+
   // Admin expandable users
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
@@ -117,6 +120,7 @@ export default function SessionsPage() {
   }, [isAdmin]);
 
   useEffect(() => {
+    setCurrentUA(navigator.userAgent);
     Promise.all([fetchMySessions(), fetchAdminSessions()])
       .finally(() => setLoading(false));
   }, [fetchMySessions, fetchAdminSessions]);
@@ -249,19 +253,32 @@ export default function SessionsPage() {
             <div className="space-y-3">
               {mySessions.map((session) => {
                 const DeviceIcon = getDeviceIcon(session.device);
+                const isCurrentSession = currentUA !== "" && session.userAgent === currentUA;
                 return (
                   <div
                     key={session.id}
-                    className="flex items-center gap-4 p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
+                    className={cn(
+                      "flex items-center gap-4 p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700",
+                      isCurrentSession && "border-l-2 !border-l-emerald-500/70"
+                    )}
                   >
-                    <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                      <DeviceIcon className="w-5 h-5 text-cyan-400" />
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                      isCurrentSession ? "bg-emerald-500/20" : "bg-cyan-500/20"
+                    )}>
+                      <DeviceIcon className={cn("w-5 h-5", isCurrentSession ? "text-emerald-400" : "text-cyan-400")} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white">
                           {session.device || "Unknown Device"}
                         </span>
+                        {isCurrentSession && (
+                          <Badge variant="success" className="text-[10px] px-1.5 py-0 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            This device
+                          </Badge>
+                        )}
                         {session.city && session.country && (
                           <span className="text-xs text-slate-500 flex items-center gap-1">
                             <Globe className="w-3 h-3" />
@@ -278,13 +295,19 @@ export default function SessionsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      aria-label={`Revoke session on ${session.device || "Unknown Device"}`}
+                      className={cn(
+                        "hover:bg-red-500/10",
+                        isCurrentSession ? "text-slate-500 hover:text-red-300" : "text-red-400 hover:text-red-300"
+                      )}
                       onClick={() =>
                         setConfirmDialog({
                           open: true,
                           type: "revoke",
                           sessionId: session.id,
-                          sessionLabel: session.device || "Unknown Device",
+                          sessionLabel: isCurrentSession
+                            ? `${session.device || "Unknown Device"} (⚠ this is your current session!)`
+                            : session.device || "Unknown Device",
                         })
                       }
                       disabled={revoking === session.id}

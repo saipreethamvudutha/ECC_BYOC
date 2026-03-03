@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
+import { isValidUUID } from "@/lib/validation";
 
 /**
  * PATCH /api/users/[id]
