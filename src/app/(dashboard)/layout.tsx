@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { DashboardProviders } from "@/components/layout/providers";
 
 export default async function DashboardLayout({
   children,
@@ -27,7 +28,7 @@ export default async function DashboardLayout({
           }}
         />
         <main className="flex-1 overflow-auto p-6 grid-pattern">
-          {children}
+          <DashboardProviders>{children}</DashboardProviders>
         </main>
       </div>
     </div>
