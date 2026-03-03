@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CAPABILITIES } from "@/lib/capabilities";
 
 /**
  * GET /api/roles/[roleId]/permissions
@@ -60,6 +61,6 @@ export async function GET(
     },
     capabilitiesByModule,
     totalCapabilities: grantedCount,
-    totalAvailable: 39,
+    totalAvailable: CAPABILITIES.length,
   });
 }

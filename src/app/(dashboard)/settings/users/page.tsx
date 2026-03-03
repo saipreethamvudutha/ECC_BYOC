@@ -28,6 +28,14 @@ import {
   Link2,
   Globe,
   Target,
+  MoreVertical,
+  UserMinus,
+  UserCheck,
+  ShieldCheck,
+  Filter,
+  X,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -42,6 +50,18 @@ interface ScopeItem {
   name: string;
   description: string | null;
   isGlobal: boolean;
+  userCount: number;
+}
+
+interface RoleDetail {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  isBuiltin: boolean;
+  isActive: boolean;
+  maxAssignments: number | null;
+  capabilityCount: number;
   userCount: number;
 }
 
@@ -98,6 +118,31 @@ export default function UsersPage() {
   const [availableScopes, setAvailableScopes] = useState<ScopeItem[]>([]);
   const [scopeLoading, setScopeLoading] = useState<string | null>(null);
 
+  // Phase 3: Filters
+  const [filterRole, setFilterRole] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterScope, setFilterScope] = useState("");
+
+  // Phase 3: Role management dialog
+  const [showRolesDialog, setShowRolesDialog] = useState(false);
+  const [rolesUser, setRolesUser] = useState<UserItem | null>(null);
+  const [allRoles, setAllRoles] = useState<RoleDetail[]>([]);
+  const [roleToggleLoading, setRoleToggleLoading] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState("");
+
+  // Phase 3: Suspend/Reactivate dialog
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false);
+  const [suspendUser, setSuspendUser] = useState<UserItem | null>(null);
+  const [suspendAction, setSuspendAction] = useState<"suspend" | "reactivate">("suspend");
+  const [suspendLoading, setSuspendLoading] = useState(false);
+  const [suspendError, setSuspendError] = useState("");
+
+  // Phase 3: Action menu
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Current user session
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   function loadUsers() {
     fetch("/api/users")
       .then((res) => res.json())
@@ -111,6 +156,14 @@ export default function UsersPage() {
     fetch("/api/roles")
       .then((res) => res.json())
       .then((data: RoleOption[]) => setRoles(data))
+      .catch(console.error);
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data: { user: { id: string } }) => setCurrentUserId(data.user.id))
+      .catch(console.error);
+    fetch("/api/scopes")
+      .then((res) => res.json())
+      .then((data: ScopeItem[]) => setAvailableScopes(data))
       .catch(console.error);
   }, []);
 
@@ -226,6 +279,103 @@ export default function UsersPage() {
     }
   }
 
+  // Phase 3: Open Manage Roles dialog
+  async function openRolesDialog(user: UserItem) {
+    setRolesUser(user);
+    setShowRolesDialog(true);
+    setRoleError("");
+    try {
+      const res = await fetch("/api/roles");
+      const data: RoleDetail[] = await res.json();
+      setAllRoles(data);
+    } catch {
+      console.error("Failed to load roles");
+    }
+  }
+
+  // Phase 3: Toggle role assignment
+  async function handleRoleToggle(userId: string, roleId: string, isAssigned: boolean) {
+    setRoleToggleLoading(roleId);
+    setRoleError("");
+    try {
+      if (isAssigned) {
+        const res = await fetch(`/api/users/${userId}/roles/${roleId}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json();
+          setRoleError(data.error || "Failed to remove role");
+          return;
+        }
+      } else {
+        const res = await fetch(`/api/users/${userId}/roles`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roleId }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          setRoleError(data.error || "Failed to assign role");
+          return;
+        }
+      }
+      // Reload users list
+      const res = await fetch("/api/users");
+      const updatedUsers: UserItem[] = await res.json();
+      setUsers(updatedUsers);
+      const updated = updatedUsers.find((u) => u.id === userId);
+      if (updated) setRolesUser(updated);
+      // Reload roles to get updated user counts
+      const rolesRes = await fetch("/api/roles");
+      const rolesData: RoleDetail[] = await rolesRes.json();
+      setAllRoles(rolesData);
+    } catch {
+      setRoleError("Connection error");
+    } finally {
+      setRoleToggleLoading(null);
+    }
+  }
+
+  // Phase 3: Open suspend/reactivate confirmation dialog
+  function openSuspendDialog(user: UserItem, action: "suspend" | "reactivate") {
+    setSuspendUser(user);
+    setSuspendAction(action);
+    setSuspendError("");
+    setShowSuspendDialog(true);
+  }
+
+  // Phase 3: Execute suspend/reactivate
+  async function handleSuspendConfirm() {
+    if (!suspendUser) return;
+    setSuspendLoading(true);
+    setSuspendError("");
+    try {
+      const res = await fetch(`/api/users/${suspendUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: suspendAction === "suspend" ? "suspended" : "active" }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setSuspendError(data.error || `Failed to ${suspendAction} user`);
+        return;
+      }
+      setShowSuspendDialog(false);
+      loadUsers();
+    } catch {
+      setSuspendError("Connection error");
+    } finally {
+      setSuspendLoading(false);
+    }
+  }
+
+  // Phase 3: Check if filters are active
+  const hasActiveFilters = filterRole !== "" || filterStatus !== "" || filterScope !== "";
+
+  function clearFilters() {
+    setFilterRole("");
+    setFilterStatus("");
+    setFilterScope("");
+  }
+
   function getInvitationStatusInfo(user: UserItem) {
     if (!user.invitation || user.status !== "invited") return null;
     const inv = user.invitation;
@@ -248,14 +398,23 @@ export default function UsersPage() {
     );
   }
 
-  const filteredUsers = users.filter(
-    (u) =>
+  const filteredUsers = users.filter((u) => {
+    // Text search
+    const matchesSearch =
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      u.email.toLowerCase().includes(searchQuery.toLowerCase());
+    // Role filter
+    const matchesRole = filterRole === "" || u.roles.some((r) => r.id === filterRole);
+    // Status filter
+    const matchesStatus = filterStatus === "" || u.status === filterStatus;
+    // Scope filter
+    const matchesScope = filterScope === "" || u.scopes.some((s) => s.id === filterScope);
+    return matchesSearch && matchesRole && matchesStatus && matchesScope;
+  });
 
   const activeCount = users.filter((u) => u.status === "active").length;
   const invitedCount = users.filter((u) => u.status === "invited").length;
+  const suspendedCount = users.filter((u) => u.status === "suspended").length;
   const mfaCount = users.filter((u) => u.mfaEnabled).length;
 
   return (
@@ -280,22 +439,90 @@ export default function UsersPage() {
         ))}
       </div>
 
-      {/* Search + Invite */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search users by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
-          />
+      {/* Search + Filters + Invite */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search users by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
+            />
+          </div>
+          <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setInviteError(""); }}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Invite User
+          </Button>
         </div>
-        <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setInviteError(""); }}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Invite User
-        </Button>
+
+        {/* Filter Dropdowns */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filters:</span>
+          </div>
+
+          {/* Role Filter */}
+          <div className="relative">
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-1.5 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+            >
+              <option value="">All Roles</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+          </div>
+
+          {/* Status Filter */}
+          <div className="relative">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-1.5 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="invited">Invited</option>
+              <option value="suspended">Suspended</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+          </div>
+
+          {/* Scope Filter */}
+          <div className="relative">
+            <select
+              value={filterScope}
+              onChange={(e) => setFilterScope(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-1.5 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+            >
+              <option value="">All Scopes</option>
+              {availableScopes.map((scope) => (
+                <option key={scope.id} value={scope.id}>{scope.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+          </div>
+
+          {/* Clear Filters */}
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-slate-400 hover:text-white"
+              onClick={clearFilters}
+            >
+              <X className="w-3 h-3 mr-1" />
+              Clear Filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Users Table */}
@@ -307,7 +534,7 @@ export default function UsersPage() {
         </CardHeader>
         <CardContent>
           {/* Table Header */}
-          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr_auto] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
             <span>User</span>
             <span>Email</span>
             <span>Roles</span>
@@ -315,6 +542,7 @@ export default function UsersPage() {
             <span>Auth</span>
             <span>Last Login</span>
             <span>Status</span>
+            <span className="w-8"></span>
           </div>
           <div className="space-y-1">
             {filteredUsers.map((user) => {
@@ -324,7 +552,12 @@ export default function UsersPage() {
               return (
                 <div
                   key={user.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
+                  className={cn(
+                    "grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr_auto] gap-4 items-center p-4 rounded-lg transition-all border",
+                    user.status === "suspended"
+                      ? "bg-red-900/10 border-red-900/20 hover:bg-red-900/15"
+                      : "bg-slate-800/30 hover:bg-slate-800/50 border-transparent hover:border-slate-700"
+                  )}
                 >
                   {/* User Name */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -464,6 +697,81 @@ export default function UsersPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Actions Menu */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-500 hover:text-white"
+                      onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                    {openMenuId === user.id && (
+                      <>
+                        {/* Backdrop to close menu */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setOpenMenuId(null)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-slate-800 border border-slate-700 shadow-xl py-1">
+                          <button
+                            className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700/50 hover:text-cyan-400 flex items-center gap-2 transition-colors"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              openRolesDialog(user);
+                            }}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Manage Roles
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-xs text-slate-300 hover:bg-slate-700/50 hover:text-cyan-400 flex items-center gap-2 transition-colors"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              openScopesDialog(user);
+                            }}
+                          >
+                            <Target className="w-3.5 h-3.5" />
+                            Manage Scopes
+                          </button>
+                          <div className="border-t border-slate-700 my-1" />
+                          {user.status === "suspended" ? (
+                            <button
+                              className="w-full px-3 py-2 text-left text-xs text-emerald-400 hover:bg-slate-700/50 flex items-center gap-2 transition-colors"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                openSuspendDialog(user, "reactivate");
+                              }}
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              Reactivate User
+                            </button>
+                          ) : user.status === "active" ? (
+                            <button
+                              className={cn(
+                                "w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors",
+                                user.id === currentUserId
+                                  ? "text-slate-600 cursor-not-allowed"
+                                  : "text-red-400 hover:bg-slate-700/50"
+                              )}
+                              disabled={user.id === currentUserId}
+                              onClick={() => {
+                                if (user.id !== currentUserId) {
+                                  setOpenMenuId(null);
+                                  openSuspendDialog(user, "suspend");
+                                }
+                              }}
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                              {user.id === currentUserId ? "Cannot Suspend Self" : "Suspend User"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -471,10 +779,20 @@ export default function UsersPage() {
               <div className="text-center py-12 text-slate-500">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>
-                  {searchQuery
-                    ? "No users match your search."
+                  {searchQuery || hasActiveFilters
+                    ? "No users match your search or filters."
                     : "No users found."}
                 </p>
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -696,6 +1014,210 @@ export default function UsersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowScopesDialog(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Roles Dialog */}
+      <Dialog open={showRolesDialog} onOpenChange={setShowRolesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-cyan-400" />
+              Manage Roles &mdash; {rolesUser?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Assign or remove roles for this user. Roles determine which capabilities the user has across the platform.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 max-h-[400px] overflow-y-auto">
+            {roleError && (
+              <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {roleError}
+              </div>
+            )}
+
+            {allRoles.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <Shield className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Loading roles...</p>
+              </div>
+            ) : (
+              allRoles.filter((r) => r.isActive).map((role) => {
+                const isAssigned = rolesUser?.roles.some((r) => r.id === role.id) ?? false;
+                const isLoading = roleToggleLoading === role.id;
+                const isPlatformAdmin = role.slug === "platform-admin";
+                const atMaxAssignments = role.maxAssignments !== null && role.userCount >= role.maxAssignments && !isAssigned;
+
+                return (
+                  <button
+                    key={role.id}
+                    onClick={() => rolesUser && handleRoleToggle(rolesUser.id, role.id, isAssigned)}
+                    disabled={isLoading || atMaxAssignments}
+                    className={cn(
+                      "w-full p-3 rounded-lg border text-left text-sm transition-all flex items-center gap-3",
+                      isAssigned
+                        ? "border-cyan-500/50 bg-cyan-500/10"
+                        : atMaxAssignments
+                          ? "border-slate-700 opacity-50 cursor-not-allowed"
+                          : "border-slate-700 hover:border-slate-600"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                      isAssigned
+                        ? "border-cyan-500 bg-cyan-500"
+                        : "border-slate-600"
+                    )}>
+                      {isLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-white" />
+                      ) : isAssigned ? (
+                        <Check className="w-3 h-3 text-white" />
+                      ) : null}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "font-medium",
+                          isAssigned ? "text-cyan-400" : "text-slate-300"
+                        )}>
+                          {role.name}
+                        </span>
+                        {role.isBuiltin && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Built-in
+                          </Badge>
+                        )}
+                      </div>
+                      {role.description && (
+                        <p className="text-xs text-slate-500 mt-0.5">{role.description}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[10px] text-slate-600">
+                          {role.capabilityCount} capabilities
+                        </span>
+                        <span className="text-[10px] text-slate-600">
+                          {role.userCount} user{role.userCount !== 1 ? "s" : ""} assigned
+                        </span>
+                      </div>
+                      {isPlatformAdmin && role.maxAssignments && (
+                        <div className={cn(
+                          "flex items-center gap-1 mt-1 text-[10px]",
+                          role.userCount >= role.maxAssignments
+                            ? "text-yellow-400"
+                            : "text-slate-500"
+                        )}>
+                          <AlertTriangle className="w-3 h-3" />
+                          Max {role.maxAssignments} assignments ({role.userCount}/{role.maxAssignments} used)
+                        </div>
+                      )}
+                      {atMaxAssignments && (
+                        <p className="text-[10px] text-yellow-400 mt-1">
+                          Maximum assignment limit reached
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRolesDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Suspend/Reactivate Confirmation Dialog */}
+      <Dialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {suspendAction === "suspend" ? (
+                <>
+                  <UserMinus className="w-5 h-5 text-red-400" />
+                  Suspend User
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-5 h-5 text-emerald-400" />
+                  Reactivate User
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {suspendAction === "suspend"
+                ? "Suspending a user will immediately revoke their access to the platform. They will not be able to log in until reactivated."
+                : "Reactivating a user will restore their access to the platform with their existing roles and scopes."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            {suspendUser && (
+              <div className={cn(
+                "p-4 rounded-lg border",
+                suspendAction === "suspend"
+                  ? "bg-red-500/10 border-red-500/20"
+                  : "bg-emerald-500/10 border-emerald-500/20"
+              )}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-white">
+                      {suspendUser.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">{suspendUser.name}</p>
+                    <p className="text-xs text-slate-400">{suspendUser.email}</p>
+                    <div className="flex gap-1 mt-1">
+                      {suspendUser.roles.map((r) => (
+                        <Badge key={r.id} variant="outline" className="text-[10px]">
+                          {r.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {suspendError && (
+              <div className="mt-3 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {suspendError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSuspendDialog(false)} disabled={suspendLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant={suspendAction === "suspend" ? "destructive" : "default"}
+              onClick={handleSuspendConfirm}
+              disabled={suspendLoading}
+            >
+              {suspendLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {suspendAction === "suspend" ? "Suspending..." : "Reactivating..."}
+                </>
+              ) : (
+                <>
+                  {suspendAction === "suspend" ? (
+                    <><UserMinus className="w-4 h-4" /> Suspend User</>
+                  ) : (
+                    <><UserCheck className="w-4 h-4" /> Reactivate User</>
+                  )}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

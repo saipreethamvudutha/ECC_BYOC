@@ -4,6 +4,52 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [0.4.0] — 2026-03-02 — RBAC v2 Phase 2: Tag-Based Scoping
+
+### Added
+- Tag management APIs (CRUD, bulk assign/remove)
+- Scope management APIs (CRUD, preview, user scopes)
+- Auto-tag engine with rule-based condition evaluation
+- Scope-aware asset API with tag-based filtering (AND/OR/UNION)
+- Settings → Scopes management page with tag filter builder and live preview
+- Assets page: Tags column with colored badges and tag-based filter dropdown
+- Users page: Scopes column with scope assignment dialog
+- Demo seed: 11 tags, 12 assets, 5 named scopes, 3 auto-tag rules
+
+### Changed
+- Assets API now includes `assetTags` relation and scope-based WHERE filtering
+- Users API now includes `userScopes` relation
+- Asset creation calls auto-tag engine after insert
+- Settings layout updated with Scopes tab
+
+### New Files (12)
+- `src/app/api/tags/route.ts` — Tag list + create
+- `src/app/api/tags/[id]/route.ts` — Tag delete
+- `src/app/api/assets/[id]/tags/route.ts` — Asset tag list + bulk assign
+- `src/app/api/assets/[id]/tags/[tagId]/route.ts` — Remove tag from asset
+- `src/app/api/scopes/route.ts` — Scope list + create
+- `src/app/api/scopes/[id]/route.ts` — Scope get/update/delete
+- `src/app/api/scopes/[id]/preview/route.ts` — Scope preview (matching assets)
+- `src/app/api/auth/me/scopes/route.ts` — Current user's scopes
+- `src/app/api/users/[id]/scopes/route.ts` — User scope list + assign
+- `src/app/api/users/[id]/scopes/[scopeId]/route.ts` — Remove scope from user
+- `src/lib/auto-tag.ts` — Auto-tag rule evaluation engine
+- `src/app/(dashboard)/settings/scopes/page.tsx` — Scopes management UI
+
+### Modified Files (7)
+- `src/app/api/assets/route.ts` — Added `assetTags` include + scope-based WHERE filtering
+- `src/app/api/assets/create/route.ts` — Calls `applyAutoTagRules()` after asset creation
+- `src/app/api/users/route.ts` — Added `userScopes` include in response
+- `src/app/(dashboard)/settings/layout.tsx` — Added Scopes tab to settings navigation
+- `src/app/(dashboard)/assets/page.tsx` — Tags column with badges + tag filter dropdown
+- `src/app/(dashboard)/settings/users/page.tsx` — Scopes column + scope assignment dialog
+- `prisma/seed.ts` — Added 11 tags, 12 assets, 5 scopes, 3 auto-tag rules
+
+### Git Reference
+- Commit: `3f14c82`
+
+---
+
 ## [0.3.0] — 2026-03-01 — Exargen Production Bootstrap + Resend Integration
 
 ### Changed
