@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "BYOC - Cybersecurity Platform",
   description: "Bring Your Own Cloud - Enterprise Cybersecurity & Compliance Platform",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
