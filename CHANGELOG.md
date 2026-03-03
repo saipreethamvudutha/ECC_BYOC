@@ -4,6 +4,59 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [0.5.0] — 2026-03-02 — RBAC v2 Phase 3: User & Role Management UI
+
+### Added
+- Role detail API with full capability matrix (all 42 capabilities grouped by module)
+- Role update API for custom roles (replace name, description, capabilities)
+- Role delete API with safety checks (blocks if users assigned, blocks built-in)
+- Role clone API (copies all capabilities, sets parentRoleId for lineage tracking)
+- User status API (suspend/reactivate with protection for Platform Admins and self)
+- User role assignment API with maxAssignment enforcement (e.g., Platform Admin max 2)
+- User role removal API with last-role protection
+- Roles page: full capability matrix editor with module sections, search, risk-level badges
+- Roles page: create role dialog with auto-slug generation and "based on" template dropdown
+- Roles page: clone dialog, delete confirmation with user-count warnings
+- Users page: role management dialog with assignment and removal
+- Users page: suspend/reactivate actions with confirmation dialogs
+- Users page: filter dropdowns for role, status, and scope
+
+### Changed
+- Roles list API now uses `CAPABILITIES.length` instead of hardcoded count
+- Roles permissions API fixed from hardcoded `39` to dynamic `CAPABILITIES.length` (42)
+- Users page expanded from 523 to 818 lines with role/scope management
+- Roles page rewritten from 191 to 1297 lines with capability matrix editor
+
+### New Files (5)
+- `src/app/api/roles/[roleId]/route.ts` — Role detail (GET), update (PATCH), delete (DELETE)
+- `src/app/api/roles/[roleId]/clone/route.ts` — Clone role (POST)
+- `src/app/api/users/[id]/route.ts` — User suspend/reactivate (PATCH)
+- `src/app/api/users/[id]/roles/route.ts` — User role list (GET), assign (POST)
+- `src/app/api/users/[id]/roles/[roleId]/route.ts` — Remove role from user (DELETE)
+
+### Modified Files (4)
+- `src/app/api/roles/route.ts` — Fixed `totalCapabilities` to use `CAPABILITIES.length`
+- `src/app/api/roles/[roleId]/permissions/route.ts` — Fixed `totalAvailable` to use `CAPABILITIES.length`
+- `src/app/(dashboard)/settings/roles/page.tsx` — Complete rewrite with capability matrix editor
+- `src/app/(dashboard)/settings/users/page.tsx` — Added role management, suspend/reactivate, filters
+
+### API Endpoints Added
+| Method | Endpoint | Purpose | Capability |
+|--------|----------|---------|------------|
+| GET | `/api/roles/[roleId]` | Full role detail with capability matrix | `admin.role.view` |
+| PATCH | `/api/roles/[roleId]` | Update custom role | `admin.role.manage` |
+| DELETE | `/api/roles/[roleId]` | Delete custom role | `admin.role.manage` |
+| POST | `/api/roles/[roleId]/clone` | Clone existing role | `admin.role.manage` |
+| PATCH | `/api/users/[id]` | Suspend/reactivate user | `admin.user.manage` |
+| GET | `/api/users/[id]/roles` | List user's roles | `admin.user.view` |
+| POST | `/api/users/[id]/roles` | Assign role to user | `admin.role.manage` |
+| DELETE | `/api/users/[id]/roles/[roleId]` | Remove role from user | `admin.role.manage` |
+
+### Git Reference
+- Commit: `ff2d3d2`
+
+---
+
 ## [0.4.0] — 2026-03-02 — RBAC v2 Phase 2: Tag-Based Scoping
 
 ### Added
