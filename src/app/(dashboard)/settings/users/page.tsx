@@ -26,6 +26,8 @@ import {
   Copy,
   Check,
   Link2,
+  Globe,
+  Target,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -33,6 +35,14 @@ interface RoleOption {
   id: string;
   name: string;
   slug: string;
+}
+
+interface ScopeItem {
+  id: string;
+  name: string;
+  description: string | null;
+  isGlobal: boolean;
+  userCount: number;
 }
 
 interface UserItem {
@@ -47,6 +57,7 @@ interface UserItem {
   department: string | null;
   phone: string | null;
   roles: { id: string; name: string; slug: string }[];
+  scopes: { id: string; name: string; isGlobal: boolean }[];
   invitation: {
     id: string;
     status: string;
@@ -82,6 +93,10 @@ export default function UsersPage() {
   const [inviteSuccess, setInviteSuccess] = useState<{ link: string; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showScopesDialog, setShowScopesDialog] = useState(false);
+  const [scopesUser, setScopesUser] = useState<UserItem | null>(null);
+  const [availableScopes, setAvailableScopes] = useState<ScopeItem[]>([]);
+  const [scopeLoading, setScopeLoading] = useState<string | null>(null);
 
   function loadUsers() {
     fetch("/api/users")
@@ -170,6 +185,47 @@ export default function UsersPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function isAdminUser(user: UserItem) {
+    return user.roles.some((r) => r.slug === "platform-admin" || r.slug === "org-admin");
+  }
+
+  async function openScopesDialog(user: UserItem) {
+    setScopesUser(user);
+    setShowScopesDialog(true);
+    try {
+      const res = await fetch("/api/scopes");
+      const data: ScopeItem[] = await res.json();
+      setAvailableScopes(data);
+    } catch {
+      console.error("Failed to load scopes");
+    }
+  }
+
+  async function handleScopeToggle(userId: string, scopeId: string, assigned: boolean) {
+    setScopeLoading(scopeId);
+    try {
+      if (assigned) {
+        await fetch(`/api/users/${userId}/scopes/${scopeId}`, { method: "DELETE" });
+      } else {
+        await fetch(`/api/users/${userId}/scopes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scopeId }),
+        });
+      }
+      loadUsers();
+      // Refresh the scopes user data
+      const res = await fetch("/api/users");
+      const updatedUsers: UserItem[] = await res.json();
+      const updated = updatedUsers.find((u) => u.id === userId);
+      if (updated) setScopesUser(updated);
+    } catch {
+      console.error("Failed to toggle scope");
+    } finally {
+      setScopeLoading(null);
+    }
+  }
+
   function getInvitationStatusInfo(user: UserItem) {
     if (!user.invitation || user.status !== "invited") return null;
     const inv = user.invitation;
@@ -251,10 +307,11 @@ export default function UsersPage() {
         </CardHeader>
         <CardContent>
           {/* Table Header */}
-          <div className="hidden md:grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1.5fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
             <span>User</span>
             <span>Email</span>
             <span>Roles</span>
+            <span>Scopes</span>
             <span>Auth</span>
             <span>Last Login</span>
             <span>Status</span>
@@ -267,7 +324,7 @@ export default function UsersPage() {
               return (
                 <div
                   key={user.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_1.5fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1.2fr_1fr_1fr_1.5fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
                 >
                   {/* User Name */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -302,6 +359,40 @@ export default function UsersPage() {
                     {user.roles.length === 0 && (
                       <span className="text-xs text-slate-500">No roles</span>
                     )}
+                  </div>
+
+                  {/* Scopes */}
+                  <div className="flex gap-1 flex-wrap items-center">
+                    {isAdminUser(user) ? (
+                      <Badge variant="info" className="text-[10px]">
+                        <Globe className="w-3 h-3 mr-1" />
+                        Implicit Global
+                      </Badge>
+                    ) : (
+                      <>
+                        {user.scopes.map((scope) => (
+                          <Badge
+                            key={scope.id}
+                            variant={scope.isGlobal ? "info" : "outline"}
+                            className="text-[10px]"
+                          >
+                            {scope.isGlobal && <Globe className="w-3 h-3 mr-1" />}
+                            {scope.name}
+                          </Badge>
+                        ))}
+                        {user.scopes.length === 0 && (
+                          <span className="text-xs text-slate-500">No scopes</span>
+                        )}
+                      </>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-slate-500 hover:text-cyan-400"
+                      onClick={() => openScopesDialog(user)}
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
 
                   {/* Auth Provider */}
@@ -516,6 +607,97 @@ export default function UsersPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Scopes Dialog */}
+      <Dialog open={showScopesDialog} onOpenChange={setShowScopesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-cyan-400" />
+              Manage Scopes &mdash; {scopesUser?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Assign or remove data scopes for this user. Scopes control which tagged resources the user can access.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 max-h-[400px] overflow-y-auto">
+            {scopesUser && isAdminUser(scopesUser) && (
+              <div className="px-4 py-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm flex items-center gap-2">
+                <Globe className="w-4 h-4 flex-shrink-0" />
+                Admin roles have implicit global access
+              </div>
+            )}
+
+            {availableScopes.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <Target className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No scopes available</p>
+              </div>
+            ) : (
+              availableScopes.map((scope) => {
+                const isAssigned = scopesUser?.scopes.some((s) => s.id === scope.id) ?? false;
+                const isScopeLoading = scopeLoading === scope.id;
+
+                return (
+                  <button
+                    key={scope.id}
+                    onClick={() => scopesUser && handleScopeToggle(scopesUser.id, scope.id, isAssigned)}
+                    disabled={isScopeLoading}
+                    className={cn(
+                      "w-full p-3 rounded-lg border text-left text-sm transition-all flex items-center gap-3",
+                      isAssigned
+                        ? "border-cyan-500/50 bg-cyan-500/10"
+                        : "border-slate-700 hover:border-slate-600"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+                      isAssigned
+                        ? "border-cyan-500 bg-cyan-500"
+                        : "border-slate-600"
+                    )}>
+                      {isScopeLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-white" />
+                      ) : isAssigned ? (
+                        <Check className="w-3 h-3 text-white" />
+                      ) : null}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "font-medium",
+                          isAssigned ? "text-cyan-400" : "text-slate-300"
+                        )}>
+                          {scope.name}
+                        </span>
+                        {scope.isGlobal && (
+                          <Badge variant="info" className="text-[10px]">
+                            <Globe className="w-3 h-3 mr-1" />
+                            Global
+                          </Badge>
+                        )}
+                      </div>
+                      {scope.description && (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{scope.description}</p>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-600 flex-shrink-0">
+                      {scope.userCount} user{scope.userCount !== 1 ? "s" : ""}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowScopesDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -18,6 +18,11 @@ export async function GET() {
             role: { select: { id: true, name: true, slug: true } },
           },
         },
+        userScopes: {
+          include: {
+            scope: { select: { id: true, name: true, isGlobal: true } },
+          },
+        },
       },
     }),
     prisma.invitation.findMany({
@@ -52,6 +57,11 @@ export async function GET() {
           id: ur.role.id,
           name: ur.role.name,
           slug: ur.role.slug,
+        })),
+        scopes: u.userScopes.map((us) => ({
+          id: us.scope.id,
+          name: us.scope.name,
+          isGlobal: us.scope.isGlobal,
         })),
         invitation: inv
           ? {

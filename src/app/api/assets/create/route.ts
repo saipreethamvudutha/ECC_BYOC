@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { applyAutoTagRules } from "@/lib/auto-tag";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
     include: { group: true },
   });
 
+  // Apply auto-tag rules to the new asset
+  const appliedTags = await applyAutoTagRules(session.tenantId, asset.id);
+
   await prisma.auditLog.create({
     data: {
       tenantId: session.tenantId,
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest) {
       resourceType: "asset",
       resourceId: asset.id,
       result: "success",
-      details: JSON.stringify({ name, type, ipAddress }),
+      details: JSON.stringify({ name, type, ipAddress, autoTagsApplied: appliedTags.length }),
     },
   });
 

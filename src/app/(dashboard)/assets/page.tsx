@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,18 @@ import {
   Plus,
   Search,
   Layers,
+  Tag,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
+
+interface AssetTag {
+  id: string;
+  key: string;
+  value: string;
+  color: string | null;
+}
 
 interface AssetItem {
   id: string;
@@ -27,6 +37,7 @@ interface AssetItem {
   criticality: string;
   status: string;
   tags: string[];
+  assetTags: AssetTag[];
   group: { id: string; name: string } | null;
   lastScanAt: string | null;
   createdAt: string;
@@ -67,6 +78,25 @@ export default function AssetsPage() {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close tag dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        tagDropdownRef.current &&
+        !tagDropdownRef.current.contains(event.target as Node)
+      ) {
+        setTagDropdownOpen(false);
+      }
+    }
+    if (tagDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tagDropdownOpen]);
 
   useEffect(() => {
     fetch("/api/assets")
@@ -87,12 +117,25 @@ export default function AssetsPage() {
     );
   }
 
-  const filteredAssets = assets.filter(
-    (a) =>
+  // Collect all unique tags from loaded assets
+  const uniqueTags = Array.from(
+    new Map(
+      assets.flatMap((a) =>
+        (a.assetTags || []).map((t) => [`${t.key}:${t.value}`, t] as const)
+      )
+    ).values()
+  );
+
+  const filteredAssets = assets.filter((a) => {
+    const matchesSearch =
       a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.hostname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.ipAddress?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      a.ipAddress?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTag =
+      !selectedTag ||
+      (a.assetTags || []).some((t) => `${t.key}:${t.value}` === selectedTag);
+    return matchesSearch && matchesTag;
+  });
 
   const activeCount = assets.filter((a) => a.status === "active").length;
   const criticalCount = assets.filter((a) => a.criticality === "critical").length;
@@ -145,16 +188,81 @@ export default function AssetsPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          type="text"
-          placeholder="Search by name, hostname, or IP address..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
-        />
+      {/* Search & Tag Filter */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search by name, hostname, or IP address..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
+          />
+        </div>
+
+        {/* Tag Filter Dropdown */}
+        <div className="relative" ref={tagDropdownRef}>
+          <Button
+            variant="outline"
+            className="gap-2 text-sm"
+            onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+          >
+            <Tag className="w-4 h-4" />
+            {selectedTag ? selectedTag : "Filter by tag"}
+            <ChevronDown className="w-3 h-3" />
+          </Button>
+          {selectedTag && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedTag(null);
+              }}
+              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-600 hover:bg-slate-500 text-white flex items-center justify-center"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+          {tagDropdownOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-64 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-xl">
+              {uniqueTags.length === 0 ? (
+                <div className="p-3 text-xs text-slate-500 text-center">
+                  No tags available
+                </div>
+              ) : (
+                <div className="py-1">
+                  {uniqueTags.map((tag) => {
+                    const tagKey = `${tag.key}:${tag.value}`;
+                    const bgColor = tag.color || "#06b6d4";
+                    return (
+                      <button
+                        key={tag.id}
+                        onClick={() => {
+                          setSelectedTag(
+                            selectedTag === tagKey ? null : tagKey
+                          );
+                          setTagDropdownOpen(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-sm hover:bg-slate-800 flex items-center gap-2 transition-colors",
+                          selectedTag === tagKey && "bg-slate-800"
+                        )}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: bgColor }}
+                        />
+                        <span className="text-slate-300 truncate">
+                          {tag.key}:{tag.value}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Asset List */}
@@ -166,12 +274,13 @@ export default function AssetsPage() {
         </CardHeader>
         <CardContent>
           {/* Table Header */}
-          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
+          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
             <span>Name</span>
             <span>Type</span>
             <span>IP / Hostname</span>
             <span>OS</span>
             <span>Criticality</span>
+            <span>Tags</span>
             <span>Group</span>
             <span>Status</span>
           </div>
@@ -181,7 +290,7 @@ export default function AssetsPage() {
               return (
                 <div
                   key={asset.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
                 >
                   {/* Name */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -225,6 +334,27 @@ export default function AssetsPage() {
                     </Badge>
                   </div>
 
+                  {/* Tags */}
+                  <div className="flex flex-wrap gap-1">
+                    {(asset.assetTags || []).length > 0 ? (
+                      asset.assetTags.map((tag) => (
+                        <Badge
+                          key={tag.id}
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0"
+                          style={{
+                            borderColor: tag.color || "#06b6d4",
+                            color: tag.color || "#06b6d4",
+                          }}
+                        >
+                          {tag.key}:{tag.value}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-sm text-slate-500">-</span>
+                    )}
+                  </div>
+
                   {/* Group */}
                   <div>
                     <p className="text-sm text-slate-400 truncate">
@@ -245,8 +375,8 @@ export default function AssetsPage() {
               <div className="text-center py-12 text-slate-500">
                 <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>
-                  {searchQuery
-                    ? "No assets match your search."
+                  {searchQuery || selectedTag
+                    ? "No assets match your filters."
                     : "No assets found. Add your first asset to get started."}
                 </p>
               </div>
