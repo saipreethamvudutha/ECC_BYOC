@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { CAPABILITIES } from "@/lib/capabilities";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET() {
   const session = await getSession();
@@ -155,26 +156,25 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    // Audit log
-    await tx.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "role.created",
-        resourceType: "role",
-        resourceId: newRole.id,
-        result: "success",
-        details: JSON.stringify({
-          name: newRole.name,
-          slug: newRole.slug,
-          capabilityCount: capabilities.length,
-          parentRoleId: parentRoleId || null,
-        }),
-      },
-    });
-
     return newRole;
+  });
+
+  // Audit log (outside transaction — createAuditLog uses its own prisma call)
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "role.created",
+    resourceType: "role",
+    resourceId: role.id,
+    result: "success",
+    details: {
+      name: role.name,
+      slug: role.slug,
+      capabilityCount: capabilities.length,
+      parentRoleId: parentRoleId || null,
+    },
+    request,
   });
 
   // Invalidate RBAC cache for the tenant

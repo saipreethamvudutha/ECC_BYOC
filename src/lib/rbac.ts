@@ -15,6 +15,7 @@
  */
 
 import { prisma } from "./prisma";
+import { createAuditLog } from "./audit";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -474,20 +475,17 @@ export class RBACEngine {
     result: string
   ): void {
     // Fire-and-forget: audit log should never block authorization
-    prisma.auditLog
-      .create({
-        data: {
-          tenantId,
-          actorId: userId,
-          actorType: "user",
-          action: `capability.check:${capability}`,
-          result,
-          details: JSON.stringify({ capability, result }),
-        },
-      })
-      .catch(() => {
-        /* swallow errors — audit log must never break the app */
-      });
+    createAuditLog({
+      tenantId,
+      actorId: userId,
+      actorType: "user",
+      action: `capability.check:${capability}`,
+      result: result as "denied",
+      details: { capability, result },
+      request: null,
+    }).catch(() => {
+      /* swallow errors — audit log must never break the app */
+    });
   }
 }
 

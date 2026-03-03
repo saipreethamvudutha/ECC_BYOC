@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function PATCH(request: NextRequest) {
   const session = await getSession();
@@ -65,21 +66,20 @@ export async function PATCH(request: NextRequest) {
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: "compliance.control.updated",
-      resourceType: "compliance_control",
-      resourceId: controlId,
-      result: "success",
-      details: JSON.stringify({
-        controlId: control.controlId,
-        previousStatus,
-        newStatus: status,
-      }),
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "compliance.control.updated",
+    resourceType: "compliance_control",
+    resourceId: controlId,
+    result: "success",
+    details: {
+      controlId: control.controlId,
+      previousStatus,
+      newStatus: status,
     },
+    request,
   });
 
   return NextResponse.json({

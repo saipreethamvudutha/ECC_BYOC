@@ -3,6 +3,8 @@ import { rbac } from "./rbac";
 import * as bcrypt from "bcryptjs";
 import * as jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+import { createAuditLog } from "./audit";
+import { checkAccountLockout, recordFailedLogin, resetFailedLoginAttempts, createSession as createDbSession } from "./security";
 
 function getJwtSecret(): string {
   const secret = process.env.AUTH_SECRET;
@@ -37,7 +39,8 @@ export interface JWTPayload {
  */
 export async function authenticateUser(
   email: string,
-  password: string
+  password: string,
+  request?: Request | null
 ): Promise<{ user: SessionUser; accessToken: string; refreshToken: string } | null> {
   const user = await prisma.user.findFirst({
     where: { email, status: "active" },
@@ -49,21 +52,42 @@ export async function authenticateUser(
 
   if (!user || !user.passwordHash) return null;
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    // Log failed attempt
-    await prisma.auditLog.create({
-      data: {
-        tenantId: user.tenantId,
-        actorId: user.id,
-        actorType: "user",
-        action: "user.login_failed",
-        result: "denied",
-        details: JSON.stringify({ reason: "invalid_password" }),
-      },
+  // Check account lockout
+  const lockoutStatus = await checkAccountLockout(user.id);
+  if (lockoutStatus.locked) {
+    await createAuditLog({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorType: "user",
+      action: "user.login_failed",
+      result: "denied",
+      details: { reason: "account_locked", remainingSeconds: lockoutStatus.remainingSeconds },
+      request,
     });
     return null;
   }
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
+    const failResult = await recordFailedLogin(user.id);
+    await createAuditLog({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorType: "user",
+      action: failResult.locked ? "account.locked" : "user.login_failed",
+      result: "denied",
+      details: {
+        reason: "invalid_password",
+        attempts: failResult.attempts,
+        locked: failResult.locked,
+      },
+      request,
+    });
+    return null;
+  }
+
+  // Clear failed login attempts on success
+  await resetFailedLoginAttempts(user.id);
 
   // Update last login
   await prisma.user.update({
@@ -72,14 +96,13 @@ export async function authenticateUser(
   });
 
   // Log successful login
-  await prisma.auditLog.create({
-    data: {
-      tenantId: user.tenantId,
-      actorId: user.id,
-      actorType: "user",
-      action: "user.login",
-      result: "success",
-    },
+  await createAuditLog({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    actorType: "user",
+    action: "user.login",
+    result: "success",
+    request,
   });
 
   const sessionUser: SessionUser = {
@@ -95,6 +118,9 @@ export async function authenticateUser(
 
   const accessToken = generateToken({ userId: user.id, tenantId: user.tenantId, email: user.email, type: "access" }, ACCESS_TOKEN_TTL);
   const refreshToken = generateToken({ userId: user.id, tenantId: user.tenantId, email: user.email, type: "refresh" }, REFRESH_TOKEN_TTL);
+
+  // Create database session for refresh token tracking
+  await createDbSession(user.id, user.tenantId, refreshToken, request);
 
   return { user: sessionUser, accessToken, refreshToken };
 }

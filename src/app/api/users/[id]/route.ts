@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 /**
  * PATCH /api/users/[id]
@@ -114,24 +115,23 @@ export async function PATCH(
   }
 
   // Audit log
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: status && status !== targetUser.status
-        ? `user.${status === "suspended" ? "suspended" : "reactivated"}`
-        : "user.updated",
-      resourceType: "user",
-      resourceId: id,
-      result: "success",
-      details: JSON.stringify({
-        userId: id,
-        userName: updatedUser.name,
-        changes: updateData,
-        previousStatus: targetUser.status,
-      }),
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: status && status !== targetUser.status
+      ? `user.${status === "suspended" ? "suspended" : "reactivated"}`
+      : "user.updated",
+    resourceType: "user",
+    resourceId: id,
+    result: "success",
+    details: {
+      userId: id,
+      userName: updatedUser.name,
+      changes: updateData,
+      previousStatus: targetUser.status,
     },
+    request,
   });
 
   return NextResponse.json({

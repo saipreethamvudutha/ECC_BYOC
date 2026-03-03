@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 /**
  * GET /api/scopes/[id]
@@ -119,20 +120,19 @@ export async function PATCH(
 
     rbac.invalidateCache(session.tenantId);
 
-    await prisma.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "scope.updated",
-        resourceType: "scope",
-        resourceId: id,
-        result: "success",
-        details: JSON.stringify({
-          name: updated.name,
-          changes: Object.keys(updateData),
-        }),
+    await createAuditLog({
+      tenantId: session.tenantId,
+      actorId: session.id,
+      actorType: "user",
+      action: "scope.updated",
+      resourceType: "scope",
+      resourceId: id,
+      result: "success",
+      details: {
+        name: updated.name,
+        changes: Object.keys(updateData),
       },
+      request,
     });
 
     return NextResponse.json({
@@ -203,17 +203,16 @@ export async function DELETE(
 
   rbac.invalidateCache(session.tenantId);
 
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: "scope.deleted",
-      resourceType: "scope",
-      resourceId: id,
-      result: "success",
-      details: JSON.stringify({ name: scope.name }),
-    },
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "scope.deleted",
+    resourceType: "scope",
+    resourceId: id,
+    result: "success",
+    details: { name: scope.name },
+    request,
   });
 
   return NextResponse.json({ success: true });

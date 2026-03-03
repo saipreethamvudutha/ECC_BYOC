@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { CAPABILITIES } from "@/lib/capabilities";
+import { createAuditLog } from "@/lib/audit";
 
 /**
  * POST /api/roles/[roleId]/clone — Clone an existing role
@@ -106,26 +107,25 @@ export async function POST(
       });
     }
 
-    // Audit log
-    await tx.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "role.cloned",
-        resourceType: "role",
-        resourceId: newRole.id,
-        result: "success",
-        details: JSON.stringify({
-          name: newRole.name,
-          slug: newRole.slug,
-          clonedFrom: { id: sourceRole.id, name: sourceRole.name, slug: sourceRole.slug },
-          capabilityCount: sourceRole.roleCapabilities.filter((rc) => rc.granted).length,
-        }),
-      },
-    });
-
     return newRole;
+  });
+
+  // Audit log (outside transaction)
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "role.cloned",
+    resourceType: "role",
+    resourceId: clonedRole.id,
+    result: "success",
+    details: {
+      name: clonedRole.name,
+      slug: clonedRole.slug,
+      clonedFrom: { id: sourceRole.id, name: sourceRole.name, slug: sourceRole.slug },
+      capabilityCount: sourceRole.roleCapabilities.filter((rc) => rc.granted).length,
+    },
+    request,
   });
 
   // Invalidate RBAC cache

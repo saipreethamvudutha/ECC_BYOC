@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Users, ShieldCheck, Key, ScrollText, Settings, Target } from "lucide-react";
+import { Users, ShieldCheck, Key, ScrollText, Settings, Target, Monitor, ShieldAlert } from "lucide-react";
 
 const settingsTabs = [
   { label: "Users", href: "/settings/users", icon: Users },
   { label: "Roles", href: "/settings/roles", icon: ShieldCheck },
   { label: "API Keys", href: "/settings/api-keys", icon: Key },
   { label: "Scopes", href: "/settings/scopes", icon: Target },
+  { label: "Sessions", href: "/settings/sessions", icon: Monitor },
+  { label: "Security", href: "/settings/security", icon: ShieldAlert },
   { label: "Audit Log", href: "/settings/audit-log", icon: ScrollText },
 ];
 

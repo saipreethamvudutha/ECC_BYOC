@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { CAPABILITIES, CAPABILITY_MODULES, getCapabilitiesByModule } from "@/lib/capabilities";
+import { createAuditLog } from "@/lib/audit";
 
 type RouteContext = { params: Promise<{ roleId: string }> };
 
@@ -232,24 +233,6 @@ export async function PATCH(
       changes.push("capabilities");
     }
 
-    // Audit log
-    await tx.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "role.updated",
-        resourceType: "role",
-        resourceId: roleId,
-        result: "success",
-        details: JSON.stringify({
-          changes,
-          name: name || role.name,
-          capabilityCount: capabilities?.length,
-        }),
-      },
-    });
-
     // Fetch updated role
     return tx.role.findUnique({
       where: { id: roleId },
@@ -263,6 +246,23 @@ export async function PATCH(
         createdBy: { select: { name: true } },
       },
     });
+  });
+
+  // Audit log (outside transaction)
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "role.updated",
+    resourceType: "role",
+    resourceId: roleId,
+    result: "success",
+    details: {
+      changes,
+      name: name || role.name,
+      capabilityCount: capabilities?.length,
+    },
+    request,
   });
 
   // Invalidate RBAC cache for the entire tenant (capabilities changed)
@@ -346,23 +346,22 @@ export async function DELETE(
 
     // Delete the role
     await tx.role.delete({ where: { id: roleId } });
+  });
 
-    // Audit log
-    await tx.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "role.deleted",
-        resourceType: "role",
-        resourceId: roleId,
-        result: "success",
-        details: JSON.stringify({
-          name: role.name,
-          slug: role.slug,
-        }),
-      },
-    });
+  // Audit log (outside transaction)
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "role.deleted",
+    resourceType: "role",
+    resourceId: roleId,
+    result: "success",
+    details: {
+      name: role.name,
+      slug: role.slug,
+    },
+    request: _request,
   });
 
   // Invalidate RBAC cache for the tenant

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { sendInvitationEmail, getAppUrl } from "@/lib/email";
+import { createAuditLog } from "@/lib/audit";
 import * as bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 
@@ -115,21 +116,20 @@ export async function POST(request: NextRequest) {
   }
 
   // Audit log
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: "user.invited",
-      resourceType: "user",
-      resourceId: user.id,
-      result: "success",
-      details: JSON.stringify({
-        email,
-        role: role.name,
-        emailSent: !emailWarning,
-      }),
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "user.invited",
+    resourceType: "user",
+    resourceId: user.id,
+    result: "success",
+    details: {
+      email,
+      role: role.name,
+      emailSent: !emailWarning,
     },
+    request,
   });
 
   return NextResponse.json({

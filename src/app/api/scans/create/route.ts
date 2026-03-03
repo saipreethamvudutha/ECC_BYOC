@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -81,17 +82,16 @@ export async function POST(request: NextRequest) {
     }
   }, 2000);
 
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: "scan.created",
-      resourceType: "scan",
-      resourceId: scan.id,
-      result: "success",
-      details: JSON.stringify({ name, type, targets }),
-    },
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "scan.created",
+    resourceType: "scan",
+    resourceId: scan.id,
+    result: "success",
+    details: { name, type, targets },
+    request,
   });
 
   return NextResponse.json({

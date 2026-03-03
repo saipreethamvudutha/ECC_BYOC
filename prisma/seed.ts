@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
+import crypto from "crypto";
 import { CAPABILITIES, BUILTIN_ROLES } from "../src/lib/capabilities";
 
 const prisma = new PrismaClient();
@@ -368,25 +369,323 @@ async function main() {
   }
   console.log(`   ✅ ${autoTagRules.length} auto-tag rules seeded\n`);
 
-  // ─── 12. Seed Audit Log Entry ──────────────────────────────────
-  await prisma.auditLog.create({
-    data: {
-      id: uuid(),
-      tenantId: tenant.id,
-      actorId: superAdmin.id,
-      actorType: "system",
+  // ─── 12. Seed Audit Events with Hash Chain ────────────────────
+  console.log("📝 Seeding audit events with hash chain...");
+
+  function computeHash(prevHash: string, tenantId: string, action: string, actorId: string | null, timestamp: string): string {
+    const payload = `${prevHash}|${tenantId}|${action}|${actorId || "system"}|${timestamp}`;
+    return crypto.createHash("sha256").update(payload).digest("hex");
+  }
+
+  // Clear existing audit logs for clean re-seed
+  await prisma.auditLog.deleteMany({ where: { tenantId: tenant.id } });
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const HOUR = 60 * 60 * 1000;
+  const MIN = 60 * 1000;
+
+  const auditEvents = [
+    {
       action: "system.seed",
+      actorId: null,
+      actorType: "system",
+      resourceType: null,
+      resourceId: null,
       result: "success",
-      details: JSON.stringify({ event: "Database seeded — Phase 2 production bootstrap" }),
+      details: { event: "Database seeded — Phase 4 production bootstrap" },
+      ipAddress: null,
+      userAgent: null,
+      offset: 4 * DAY + 6 * HOUR,
     },
-  });
+    {
+      action: "user.login",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: superAdmin.id,
+      result: "success",
+      details: { method: "password", mfa: false },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 4 * DAY + 5 * HOUR,
+    },
+    {
+      action: "role.created",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "role",
+      resourceId: roleMap["platform-admin"],
+      result: "success",
+      details: { roleName: "Platform Administrator", capabilities: 42 },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 4 * DAY + 4 * HOUR + 30 * MIN,
+    },
+    {
+      action: "user.invited",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: null,
+      result: "success",
+      details: { email: "analyst@exargen.com", role: "Security Analyst" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 3 * DAY + 8 * HOUR,
+    },
+    {
+      action: "user.login_failed",
+      actorId: null,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: null,
+      result: "denied",
+      details: { email: "analyst@exargen.com", reason: "invalid_password", attempt: 1 },
+      ipAddress: "198.51.100.17",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+      offset: 3 * DAY + 2 * HOUR,
+    },
+    {
+      action: "user.login_failed",
+      actorId: null,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: null,
+      result: "denied",
+      details: { email: "analyst@exargen.com", reason: "invalid_password", attempt: 2 },
+      ipAddress: "198.51.100.17",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+      offset: 3 * DAY + 2 * HOUR - 30000,
+    },
+    {
+      action: "user.login",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: superAdmin.id,
+      result: "success",
+      details: { method: "password", mfa: false },
+      ipAddress: "198.51.100.17",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+      offset: 2 * DAY + 10 * HOUR,
+    },
+    {
+      action: "asset.created",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "asset",
+      resourceId: null,
+      result: "success",
+      details: { assetName: "exg-web-prod-01", type: "server" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 2 * DAY + 9 * HOUR,
+    },
+    {
+      action: "scan.started",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "scan",
+      resourceId: null,
+      result: "success",
+      details: { scanType: "vulnerability", targets: 12 },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 2 * DAY + 6 * HOUR,
+    },
+    {
+      action: "scan.completed",
+      actorId: null,
+      actorType: "system",
+      resourceType: "scan",
+      resourceId: null,
+      result: "success",
+      details: { scanType: "vulnerability", findings: 47, critical: 3, high: 12, medium: 18, low: 14 },
+      ipAddress: null,
+      userAgent: null,
+      offset: 2 * DAY + 5 * HOUR,
+    },
+    {
+      action: "compliance.update",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "compliance",
+      resourceId: null,
+      result: "success",
+      details: { framework: "PCI DSS v4.0", controlsUpdated: 4, status: "partial" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 1 * DAY + 14 * HOUR,
+    },
+    {
+      action: "report.generated",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "report",
+      resourceId: null,
+      result: "success",
+      details: { reportType: "executive_summary", format: "pdf", period: "2026-Q1" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 1 * DAY + 12 * HOUR,
+    },
+    {
+      action: "role.assigned",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "user_role",
+      resourceId: null,
+      result: "success",
+      details: { userId: "analyst-placeholder", role: "Security Analyst" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 1 * DAY + 8 * HOUR,
+    },
+    {
+      action: "apikey.created",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "api_key",
+      resourceId: null,
+      result: "success",
+      details: { keyName: "SIEM Integration Key", permissions: ["read:alerts", "write:events"], expiresIn: "90d" },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 12 * HOUR,
+    },
+    {
+      action: "user.login",
+      actorId: superAdmin.id,
+      actorType: "user",
+      resourceType: "user",
+      resourceId: superAdmin.id,
+      result: "success",
+      details: { method: "password", mfa: false },
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      offset: 2 * HOUR,
+    },
+  ];
+
+  // Map action → category
+  function getCategory(action: string): string {
+    if (action.startsWith("user.login") || action === "user.login_failed") return "auth";
+    if (action.startsWith("role.") || action.startsWith("capability.")) return "rbac";
+    if (["asset.created", "tag.", "scope.", "scan.started", "scan.completed", "compliance.update", "report.generated"].some(p => action.startsWith(p) || action === p)) return "data";
+    if (action.startsWith("user.") && !action.startsWith("user.login")) return "admin";
+    if (action.startsWith("apikey.")) return "security";
+    return "system";
+  }
+
+  // Map action → severity
+  function getSeverity(action: string): string {
+    if (action === "user.login_failed") return "medium";
+    if (action === "user.suspended") return "high";
+    if (action === "account.locked") return "critical";
+    if (["role.created", "user.invited", "apikey.created"].includes(action)) return "low";
+    return "info";
+  }
+
+  let prevHash = "GENESIS";
+
+  for (const evt of auditEvents) {
+    const timestamp = new Date(Date.now() - evt.offset);
+    const hash = computeHash(prevHash, tenant.id, evt.action, evt.actorId, timestamp.toISOString());
+    prevHash = hash;
+
+    await prisma.auditLog.create({
+      data: {
+        id: uuid(),
+        tenantId: tenant.id,
+        actorId: evt.actorId,
+        actorType: evt.actorType,
+        action: evt.action,
+        resourceType: evt.resourceType,
+        resourceId: evt.resourceId,
+        result: evt.result,
+        details: JSON.stringify(evt.details),
+        category: getCategory(evt.action),
+        severity: getSeverity(evt.action),
+        ipAddress: evt.ipAddress,
+        userAgent: evt.userAgent,
+        integrityHash: hash,
+        createdAt: timestamp,
+      },
+    });
+  }
+  console.log(`   ✅ ${auditEvents.length} audit events seeded with SHA-256 hash chain\n`);
+
+  // ─── 13. Seed Demo Sessions ──────────────────────────────────────
+  console.log("🔑 Seeding demo sessions...");
+
+  // Clear existing sessions for clean re-seed
+  await prisma.session.deleteMany({ where: { tenantId: tenant.id } });
+
+  const sessionDefinitions = [
+    {
+      device: "Chrome on Windows 11",
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0",
+      city: "San Francisco",
+      country: "US",
+      isActive: true,
+      revokedAt: null as Date | null,
+      lastActiveOffset: 5 * MIN,
+      expiresOffset: -(7 * DAY),   // 7 days from now (negative = future)
+    },
+    {
+      device: "Safari on macOS",
+      ipAddress: "198.51.100.17",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
+      city: "London",
+      country: "GB",
+      isActive: true,
+      revokedAt: null as Date | null,
+      lastActiveOffset: 3 * HOUR,
+      expiresOffset: -(5 * DAY),   // 5 days from now
+    },
+    {
+      device: "Firefox on Linux",
+      ipAddress: "192.0.2.88",
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+      city: "Berlin",
+      country: "DE",
+      isActive: false,
+      revokedAt: new Date(Date.now() - 2 * DAY) as Date | null,
+      lastActiveOffset: 3 * DAY,
+      expiresOffset: 1 * DAY,      // already expired (positive = past)
+    },
+  ];
+
+  for (let i = 0; i < sessionDefinitions.length; i++) {
+    const sess = sessionDefinitions[i];
+    await prisma.session.create({
+      data: {
+        id: uuid(),
+        tenantId: tenant.id,
+        userId: superAdmin.id,
+        tokenHash: crypto.createHash("sha256").update(`demo-session-${i}`).digest("hex"),
+        ipAddress: sess.ipAddress,
+        userAgent: sess.userAgent,
+        device: sess.device,
+        city: sess.city,
+        country: sess.country,
+        isActive: sess.isActive,
+        lastActiveAt: new Date(Date.now() - sess.lastActiveOffset),
+        expiresAt: new Date(Date.now() - sess.expiresOffset),
+        revokedAt: sess.revokedAt,
+      },
+    });
+  }
+  console.log(`   ✅ ${sessionDefinitions.length} demo sessions seeded\n`);
 
   // ─── Summary ─────────────────────────────────────────────────────
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 2)");
+  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 4)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  ${CAPABILITIES.length} capabilities · ${BUILTIN_ROLES.length} roles · 6 scopes`);
   console.log(`  ${tagDefinitions.length} tags · ${assetDefinitions.length} assets · ${autoTagRules.length} auto-tag rules`);
+  console.log(`  ${auditEvents.length} audit events (hash-chained) · ${sessionDefinitions.length} sessions`);
   console.log("  1 user (Super Admin)");
   console.log("");
   console.log("  Login Credentials:");

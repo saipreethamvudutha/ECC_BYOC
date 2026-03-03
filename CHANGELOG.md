@@ -4,6 +4,85 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [0.6.0] — 2026-03-03 — RBAC v2 Phase 4: Audit & Security
+
+### Added
+- **Centralized Audit Logger** (`src/lib/audit.ts`) with SHA-256 hash chain integrity, automatic category/severity mapping, and IP/user-agent extraction from request headers
+- **Audit Integrity Verification** — `verifyAuditIntegrity()` walks the hash chain and reports tamper detection; exposed via `GET /api/audit-log/integrity`
+- **Audit Log Export** — CSV and JSON export with server-side filtering, max 10K records; `GET /api/audit-log/export`
+- **Database-Backed Session Management** — Session model with tokenHash, IP, device, city, country; 4 new API endpoints for listing, revoking, and bulk-revoking sessions
+- **Account Lockout** — 5 failed login attempts trigger 15-minute lockout with auto-clear; lockout events logged as critical severity
+- **API Key Full Lifecycle** — Create (bcrypt hash, show once), revoke, and atomic rotate; `POST /api/api-keys`, `DELETE /api/api-keys/[id]`, `PATCH /api/api-keys/[id]`
+- **Security Dashboard** (`/settings/security`) — Computed security score (0-100), failed logins (24h), active sessions, API key health, audit integrity badge, recent security events timeline
+- **Sessions Management UI** (`/settings/sessions`) — Active sessions with device/IP/location, revoke individual or all, admin view grouped by user
+- **Security Headers** — X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, HSTS, Permissions-Policy, X-XSS-Protection via `next.config.ts`
+- **Security Helpers** (`src/lib/security.ts`) — Session management, account lockout, device parsing, IP extraction utilities
+
+### Changed
+- **Audit Log API** (`/api/audit-log`) fully rewritten with server-side filtering (action, result, category, severity, actorId, date range), cursor-based pagination, and filter metadata
+- **Audit Log UI** (`/settings/audit-log`) fully rewritten with date range inputs, category/severity dropdowns, working CSV/JSON export buttons, integrity badge, expandable detail view
+- **API Keys UI** (`/settings/api-keys`) fully rewritten with working create dialog, key reveal step (shown once with copy), rotate and revoke confirmation dialogs
+- **Auth system** (`src/lib/auth.ts`) — Integrated lockout checks, session creation on login, centralized audit logging
+- **Login API** — Now passes request object for IP/UA capture in audit logs
+- **17 existing API routes** retrofitted from scattered `prisma.auditLog.create()` to centralized `createAuditLog()`
+- **Settings layout** — Added Sessions (Monitor icon) and Security (ShieldAlert icon) tabs
+
+### New Files (10)
+| File | Purpose |
+|------|---------|
+| `src/lib/audit.ts` | Centralized audit logger + SHA-256 hash chain + integrity verification |
+| `src/lib/security.ts` | Session management + account lockout + device parsing |
+| `src/app/api/audit-log/export/route.ts` | CSV/JSON export (admin.audit.export) |
+| `src/app/api/audit-log/integrity/route.ts` | Hash chain integrity check (admin.audit.view) |
+| `src/app/api/sessions/route.ts` | Admin: all tenant sessions (admin.user.view) |
+| `src/app/api/auth/sessions/route.ts` | Current user's own sessions |
+| `src/app/api/auth/sessions/[sessionId]/route.ts` | Revoke specific session |
+| `src/app/api/auth/sessions/revoke-all/route.ts` | Revoke all user sessions |
+| `src/app/(dashboard)/settings/sessions/page.tsx` | Sessions management UI |
+| `src/app/(dashboard)/settings/security/page.tsx` | Security dashboard |
+
+### Modified Files (21)
+| File | Change |
+|------|--------|
+| `prisma/schema.prisma` | Session model, User lockout fields, AuditLog category/severity/hash, indexes |
+| `src/lib/auth.ts` | Lockout checks, session creation, centralized audit |
+| `src/lib/rbac.ts` | Switched auditDenial() to use createAuditLog() |
+| `next.config.ts` | Security headers (X-Frame-Options, HSTS, etc.) |
+| `src/app/api/audit-log/route.ts` | Full rewrite: server-side filtering, cursor pagination, capability check |
+| `src/app/api/api-keys/route.ts` | Added POST create + admin.apikey.manage check |
+| `src/app/api/api-keys/[id]/route.ts` | New: DELETE revoke + PATCH rotate |
+| `src/app/api/auth/login/route.ts` | Passes request to authenticateUser() |
+| `src/app/(dashboard)/settings/layout.tsx` | Sessions + Security tabs |
+| `src/app/(dashboard)/settings/audit-log/page.tsx` | Full rewrite with filters, pagination, export |
+| `src/app/(dashboard)/settings/api-keys/page.tsx` | Full rewrite with create/revoke/rotate |
+| `prisma/seed.ts` | Demo sessions + hash-chained audit events |
+| 9 other API routes | Retrofitted audit calls to use createAuditLog() |
+
+### New API Endpoints
+| Method | Endpoint | Purpose | Capability |
+|--------|----------|---------|------------|
+| GET | `/api/audit-log/export` | Export logs as CSV/JSON | `admin.audit.export` |
+| GET | `/api/audit-log/integrity` | Verify hash chain integrity | `admin.audit.view` |
+| GET | `/api/sessions` | Admin: all tenant sessions | `admin.user.view` |
+| GET | `/api/auth/sessions` | Current user's sessions | (authenticated) |
+| DELETE | `/api/auth/sessions/[sessionId]` | Revoke a session | (own) or `admin.user.manage` |
+| POST | `/api/auth/sessions/revoke-all` | Revoke all sessions | (authenticated) |
+| POST | `/api/api-keys` | Create API key | `admin.apikey.manage` |
+| DELETE | `/api/api-keys/[id]` | Revoke API key | `admin.apikey.manage` |
+| PATCH | `/api/api-keys/[id]` | Rotate API key | `admin.apikey.manage` |
+
+### Compliance Alignment
+- **SOC 2 Type II**: CC6.1 (session management), CC7.2 (tamper-evident audit), CC7.3 (security monitoring)
+- **ISO 27001:2022**: A.8.15 (activity logging), A.9.4 (access control), A.12.4 (event logging)
+- **NIST CSF 2.0**: PR.PS-04 (log integrity), DE.CM-09 (security monitoring), RS.AN-03 (forensic analysis)
+
+### Build Metrics
+- Routes: 55 → 65 (+10)
+- TypeScript errors: 0
+- Retrofitted routes: 17
+
+---
+
 ## [0.5.0] — 2026-03-02 — RBAC v2 Phase 3: User & Role Management UI
 
 ### Added

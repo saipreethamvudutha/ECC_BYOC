@@ -37,6 +37,7 @@ model Tenant {
   tags         Tag[]
   scopes       Scope[]
   autoTagRules AutoTagRule[]
+  sessions     Session[]
 
   @@map("tenants")
 }
@@ -53,13 +54,15 @@ model User {
   status         String    @default("active") // active, invited, suspended, deactivated
   mfaEnabled     Boolean   @default(false)
   mfaSecret      String?
-  lastLoginAt    DateTime?
-  lastLoginIp    String?
-  avatarUrl      String?
-  department     String?
-  phone          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
+  avatarUrl           String?
+  department          String?
+  phone               String?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userRoles      UserRole[]
@@ -71,6 +74,7 @@ model User {
   userScopes          UserScope[]
   createdScopes       Scope[]         @relation("ScopeCreator")
   createdAutoTagRules AutoTagRule[]   @relation("AutoTagRuleCreator")
+  sessions            Session[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -283,25 +287,57 @@ model ApiKey {
 
 // ─── AUDIT LOG ───────────────────────────────────────────────────
 model AuditLog {
-  id           String   @id @default(uuid())
-  tenantId     String
-  actorId      String?
-  actorType    String   // user, api_key, system, ai_agent
-  action       String   // e.g. 'role.assigned', 'scan.executed'
-  resourceType String?
-  resourceId   String?
-  details      String   @default("{}") // JSON
-  ipAddress    String?
-  userAgent    String?
-  result       String   // success, denied, error
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  actorId       String?
+  actorType     String   // user, api_key, system, ai_agent
+  action        String   // e.g. 'role.assigned', 'scan.executed'
+  resourceType  String?
+  resourceId    String?
+  details       String   @default("{}") // JSON
+  ipAddress     String?
+  userAgent     String?
+  result        String   // success, denied, error
+  category      String?  // auth, rbac, data, admin, security, system
+  severity      String   @default("info") // info, low, medium, high, critical
+  integrityHash String?  // SHA-256 hash chain for tamper detection
+  createdAt     DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   actor  User?  @relation("AuditActor", fields: [actorId], references: [id])
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([actorId, createdAt(sort: Desc)])
+  @@index([tenantId, action])
+  @@index([tenantId, category])
   @@map("audit_log")
+}
+
+// ─── SESSIONS ────────────────────────────────────────────────────
+model Session {
+  id           String    @id @default(uuid())
+  tenantId     String
+  userId       String
+  tokenHash    String    // SHA-256 hash of refresh token
+  ipAddress    String?
+  userAgent    String?
+  device       String?   // parsed from user-agent: "Chrome on Windows"
+  city         String?   // derived from IP (future: GeoIP)
+  country      String?
+  isActive     Boolean   @default(true)
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokedBy    String?   // userId who revoked
+  createdAt    DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([tenantId, isActive])
+  @@index([tokenHash])
+  @@map("sessions")
 }
 
 // ─── INVITATIONS ─────────────────────────────────────────────────

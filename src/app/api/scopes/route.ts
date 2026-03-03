@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 /**
  * GET /api/scopes
@@ -96,17 +97,16 @@ export async function POST(request: NextRequest) {
 
     rbac.invalidateCache(session.tenantId);
 
-    await prisma.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "scope.created",
-        resourceType: "scope",
-        resourceId: scope.id,
-        result: "success",
-        details: JSON.stringify({ name: scope.name, isGlobal: scope.isGlobal }),
-      },
+    await createAuditLog({
+      tenantId: session.tenantId,
+      actorId: session.id,
+      actorType: "user",
+      action: "scope.created",
+      resourceType: "scope",
+      resourceId: scope.id,
+      result: "success",
+      details: { name: scope.name, isGlobal: scope.isGlobal },
+      request,
     });
 
     return NextResponse.json(

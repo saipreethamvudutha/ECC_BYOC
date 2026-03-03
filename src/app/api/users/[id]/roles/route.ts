@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 import { v4 as uuid } from "uuid";
 
 /**
@@ -172,23 +173,22 @@ export async function POST(
     rbac.invalidateCache(session.tenantId, id);
 
     // Audit log
-    await prisma.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        actorId: session.id,
-        actorType: "user",
-        action: "role.assigned",
-        resourceType: "user",
-        resourceId: id,
-        result: "success",
-        details: JSON.stringify({
-          roleId,
-          roleName: role.name,
-          roleSlug: role.slug,
-          userId: id,
-          userName: targetUser.name,
-        }),
+    await createAuditLog({
+      tenantId: session.tenantId,
+      actorId: session.id,
+      actorType: "user",
+      action: "role.assigned",
+      resourceType: "user",
+      resourceId: id,
+      result: "success",
+      details: {
+        roleId,
+        roleName: role.name,
+        roleSlug: role.slug,
+        userId: id,
+        userName: targetUser.name,
       },
+      request,
     });
 
     return NextResponse.json(
