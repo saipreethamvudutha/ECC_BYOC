@@ -9,7 +9,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const canView = await rbac.checkCapability(session.id, session.tenantId, "compliance.view");
+  // No dedicated compliance capability — use dash.view (compliance visible to anyone with dashboard access)
+  const canView = await rbac.checkCapability(session.id, session.tenantId, "dash.view");
   if (!canView) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

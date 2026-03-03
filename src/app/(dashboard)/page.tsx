@@ -30,12 +30,19 @@ interface DashboardData {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Dashboard API returned ${res.status}`);
+        return res.json();
+      })
       .then(setData)
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Dashboard load error:", err);
+        setError(err.message || "Failed to load dashboard");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -50,7 +57,22 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) return null;
+  if (error || !data) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <AlertTriangle className="w-12 h-12 text-red-400" />
+          <p className="text-slate-300 text-sm">{error || "Failed to load dashboard data"}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-sm rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const statCards = [
     {
