@@ -33,12 +33,25 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then((res) => {
-        if (!res.ok) throw new Error(`Dashboard API returned ${res.status}`);
+    // Cache-bust to avoid stale Vercel/CDN responses
+    fetch(`/api/dashboard?_t=${Date.now()}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(`Dashboard API returned ${res.status}: ${body}`);
+        }
         return res.json();
       })
-      .then(setData)
+      .then((json) => {
+        // Validate shape before setting
+        if (!json?.stats || typeof json.stats.totalAssets === "undefined") {
+          throw new Error("Invalid dashboard response shape");
+        }
+        setData(json);
+      })
       .catch((err) => {
         console.error("Dashboard load error:", err);
         setError(err.message || "Failed to load dashboard");

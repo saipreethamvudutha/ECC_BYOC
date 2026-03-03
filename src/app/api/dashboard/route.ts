@@ -3,6 +3,10 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 
+// Force dynamic — never cache this route
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -112,7 +116,7 @@ export async function GET() {
     createdAt: log.createdAt.toISOString(),
   }));
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     stats: {
       totalAssets,
       criticalVulnerabilities: severityCounts.critical,
@@ -127,4 +131,9 @@ export async function GET() {
     complianceOverview,
     recentActivity,
   });
+
+  // Prevent all caching of dashboard data
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  return response;
 }
