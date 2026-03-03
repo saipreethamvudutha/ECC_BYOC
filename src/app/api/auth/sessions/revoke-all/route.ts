@@ -11,8 +11,10 @@ import { createAuditLog } from "@/lib/audit";
  * Revoke all sessions for a user.
  * - If no userId is provided, revokes all sessions for the current user.
  * - If userId differs from current user, requires admin.user.manage.
+ * - If excludeSessionId is provided, that session is kept active (useful
+ *   for "revoke all other sessions" so the caller's current session survives).
  *
- * Body: { userId?: string }
+ * Body: { userId?: string; excludeSessionId?: string }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -48,10 +50,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Revoke all sessions for the target user
+    // Revoke all sessions for the target user, optionally excluding one session
     const revokedCount = await revokeAllUserSessions(
       targetUserId,
-      undefined,
+      body.excludeSessionId,
       session.id
     );
 

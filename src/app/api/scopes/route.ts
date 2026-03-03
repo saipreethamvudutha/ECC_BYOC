@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
 
+const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
+
 /**
  * GET /api/scopes
  *
@@ -37,7 +39,7 @@ export async function GET() {
       id: s.id,
       name: s.name,
       description: s.description,
-      tagFilter: JSON.parse(s.tagFilter),
+      tagFilter: safeParse(s.tagFilter),
       isGlobal: s.isGlobal,
       userCount: s._count.userScopes,
       createdBy: s.createdBy?.name ?? null,
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
         id: scope.id,
         name: scope.name,
         description: scope.description,
-        tagFilter: JSON.parse(scope.tagFilter),
+        tagFilter: safeParse(scope.tagFilter),
         isGlobal: scope.isGlobal,
         createdAt: scope.createdAt.toISOString(),
       },

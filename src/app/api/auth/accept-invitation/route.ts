@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateToken } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit";
 import * as bcrypt from "bcryptjs";
 
 // Helper: find invitation by raw token
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     // Hash new password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Transaction: activate user + accept invitation + audit log
+    // Transaction: activate user + accept invitation
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
@@ -127,22 +128,23 @@ export async function POST(request: NextRequest) {
         where: { id: invitation.id },
         data: { status: "accepted" },
       }),
-      prisma.auditLog.create({
-        data: {
-          tenantId: invitation.tenantId,
-          actorId: user.id,
-          actorType: "user",
-          action: "user.invitation_accepted",
-          resourceType: "invitation",
-          resourceId: invitation.id,
-          result: "success",
-          details: JSON.stringify({
-            email: invitation.email,
-            role: invitation.role.name,
-          }),
-        },
-      }),
     ]);
+
+    // Audit log (outside transaction to preserve hash chain integrity)
+    await createAuditLog({
+      tenantId: invitation.tenantId,
+      actorId: user.id,
+      actorType: "user",
+      action: "user.invitation_accepted",
+      resourceType: "invitation",
+      resourceId: invitation.id,
+      result: "success",
+      details: {
+        email: invitation.email,
+        role: invitation.role.name,
+      },
+      request,
+    });
 
     // Fetch full user for session
     const fullUser = await prisma.user.findUnique({

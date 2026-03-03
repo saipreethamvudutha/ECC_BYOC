@@ -131,6 +131,8 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
+  const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
+
   return NextResponse.json({
     logs: pageResults.map((l) => ({
       id: l.id,
@@ -140,7 +142,7 @@ export async function GET(request: NextRequest) {
       action: l.action,
       resourceType: l.resourceType,
       resourceId: l.resourceId,
-      details: JSON.parse(l.details),
+      details: safeParse(l.details),
       ipAddress: l.ipAddress,
       userAgent: l.userAgent,
       result: l.result,

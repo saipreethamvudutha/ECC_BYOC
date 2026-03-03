@@ -20,7 +20,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "admin.user.view"
   );
   if (!allowed) {
@@ -97,7 +97,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "admin.role.manage"
   );
   if (!allowed) {

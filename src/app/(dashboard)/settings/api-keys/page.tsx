@@ -215,7 +215,7 @@ export default function ApiKeysPage() {
       // Refresh list
       await fetchApiKeys();
     } catch (err) {
-      console.error("Rotate error:", err);
+      alert(err instanceof Error ? err.message : "Failed to rotate API key");
     } finally {
       setRotateSubmitting(false);
     }
@@ -240,7 +240,7 @@ export default function ApiKeysPage() {
       setRevokeTarget(null);
       await fetchApiKeys();
     } catch (err) {
-      console.error("Revoke error:", err);
+      alert(err instanceof Error ? err.message : "Failed to revoke API key");
     } finally {
       setRevokeSubmitting(false);
     }

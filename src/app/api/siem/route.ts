@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rbac } from "@/lib/rbac";
 
 export async function GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const canView = await rbac.checkCapability(session.id, session.tenantId, "siem.view");
+  if (!canView) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
 
   const tenantId = session.tenantId;
 
@@ -33,7 +41,7 @@ export async function GET() {
       severity: e.severity,
       category: e.category,
       title: e.title,
-      details: JSON.parse(e.details),
+      details: safeParse(e.details),
       sourceIp: e.sourceIp,
       destIp: e.destIp,
       createdAt: e.createdAt.toISOString(),

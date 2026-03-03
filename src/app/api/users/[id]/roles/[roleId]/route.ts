@@ -23,7 +23,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "admin.role.manage"
   );
   if (!allowed) {

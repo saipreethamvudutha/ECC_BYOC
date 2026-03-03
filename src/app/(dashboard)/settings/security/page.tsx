@@ -154,7 +154,7 @@ export default function SecurityDashboardPage() {
         setIntegrity(data);
       }
     } catch {
-      // Silently fail
+      setIntegrity({ valid: false, totalRecords: 0, checkedAt: new Date().toISOString() });
     } finally {
       setIntegrityChecking(false);
     }
@@ -620,7 +620,7 @@ export default function SecurityDashboardPage() {
               onClick={() => router.push("/settings/audit-log")}
             >
               <ScrollText className="w-4 h-4 mr-2" />
-              Export Audit Report
+              View Audit Log
             </Button>
 
             <Button
@@ -643,7 +643,7 @@ export default function SecurityDashboardPage() {
 
             <Button
               variant="outline"
-              onClick={() => router.push("/settings/users")}
+              onClick={() => router.push("/settings/sessions")}
             >
               <Users className="w-4 h-4 mr-2" />
               View All Sessions

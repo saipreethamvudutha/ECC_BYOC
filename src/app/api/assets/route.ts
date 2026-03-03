@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
 
+const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
+
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -66,7 +68,7 @@ export async function GET() {
       os: a.os,
       criticality: a.criticality,
       status: a.status,
-      tags: JSON.parse(a.tags),
+      tags: safeParse(a.tags),
       assetTags: a.assetTags.map((at) => ({
         id: at.tag.id,
         key: at.tag.key,

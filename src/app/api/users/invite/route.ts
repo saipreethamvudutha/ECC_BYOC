@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Check permission
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "admin.user.manage"
   );
   if (!allowed) {

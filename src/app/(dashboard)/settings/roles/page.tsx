@@ -329,7 +329,13 @@ export default function RolesPage() {
   const fetchRoles = useCallback(() => {
     setLoading(true);
     fetch("/api/roles")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          console.error("Failed to load roles:", res.status);
+          return [];
+        }
+        return res.json();
+      })
       .then(setRoles)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -361,7 +367,7 @@ export default function RolesPage() {
     setDetailLoading(true);
     setDetailData(null);
     try {
-      const res = await fetch(`/api/roles/${roleId}`);
+      const res = await fetch(`/api/roles/${roleId}/permissions`);
       if (!res.ok) throw new Error("Failed to load role detail");
       const data: RoleDetail = await res.json();
       setDetailData(data);
@@ -436,7 +442,7 @@ export default function RolesPage() {
       // We'll use the first role as a template for the capability structure
       const firstRole = roles[0];
       if (firstRole) {
-        const res = await fetch(`/api/roles/${firstRole.id}`);
+        const res = await fetch(`/api/roles/${firstRole.id}/permissions`);
         if (res.ok) {
           const data: RoleDetail = await res.json();
           // Clear all grants for a new role
@@ -469,7 +475,7 @@ export default function RolesPage() {
         return;
       }
       try {
-        const res = await fetch(`/api/roles/${roleId}`);
+        const res = await fetch(`/api/roles/${roleId}/permissions`);
         if (res.ok) {
           const data: RoleDetail = await res.json();
           const granted = new Set<string>();

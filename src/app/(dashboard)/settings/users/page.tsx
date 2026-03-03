@@ -145,7 +145,13 @@ export default function UsersPage() {
 
   function loadUsers() {
     fetch("/api/users")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          console.error("Failed to load users:", res.status);
+          return [];
+        }
+        return res.json();
+      })
       .then(setUsers)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -154,15 +160,35 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers();
     fetch("/api/roles")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          console.error("Failed to load roles:", res.status);
+          return [];
+        }
+        return res.json();
+      })
       .then((data: RoleOption[]) => setRoles(data))
       .catch(console.error);
     fetch("/api/auth/me")
-      .then((res) => res.json())
-      .then((data: { user: { id: string } }) => setCurrentUserId(data.user.id))
+      .then((res) => {
+        if (!res.ok) {
+          console.error("Failed to load current user:", res.status);
+          return null;
+        }
+        return res.json();
+      })
+      .then((data: { user: { id: string } } | null) => {
+        if (data) setCurrentUserId(data.user.id);
+      })
       .catch(console.error);
     fetch("/api/scopes")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) {
+          console.error("Failed to load scopes:", res.status);
+          return [];
+        }
+        return res.json();
+      })
       .then((data: ScopeItem[]) => setAvailableScopes(data))
       .catch(console.error);
   }, []);

@@ -128,9 +128,12 @@ export default function SessionsPage() {
       if (res.ok) {
         setMySessions((prev) => prev.filter((s) => s.id !== sessionId));
         setAdminSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      } else {
+        alert("Failed to revoke session. Please try again.");
       }
     } catch (err) {
       console.error("Failed to revoke session:", err);
+      alert("Failed to revoke session. Please try again.");
     } finally {
       setRevoking(null);
       setConfirmDialog({ open: false, type: "revoke" });
@@ -144,9 +147,12 @@ export default function SessionsPage() {
       if (res.ok) {
         await fetchMySessions();
         if (isAdmin) await fetchAdminSessions();
+      } else {
+        alert("Failed to revoke all sessions. Please try again.");
       }
     } catch (err) {
       console.error("Failed to revoke all sessions:", err);
+      alert("Failed to revoke all sessions. Please try again.");
     } finally {
       setRevokingAll(false);
       setConfirmDialog({ open: false, type: "revoke-all" });

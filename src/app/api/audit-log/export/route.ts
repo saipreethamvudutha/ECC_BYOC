@@ -15,6 +15,7 @@ import { createAuditLog } from "@/lib/audit";
  *   action   - filter by action string
  *   result   - filter by result (success, denied, error)
  *   category - filter by category
+ *   severity - filter by severity (info, warning, critical)
  *   from     - ISO date lower bound
  *   to       - ISO date upper bound
  */
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get("action");
     const result = searchParams.get("result");
     const category = searchParams.get("category");
+    const severity = searchParams.get("severity");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
@@ -63,6 +65,9 @@ export async function GET(request: NextRequest) {
     if (category) {
       where.category = category;
     }
+    if (severity) {
+      where.severity = severity;
+    }
     if (from || to) {
       const dateFilter: Record<string, Date> = {};
       if (from) dateFilter.gte = new Date(from);
@@ -84,6 +89,7 @@ export async function GET(request: NextRequest) {
     if (action) filters.action = action;
     if (result) filters.result = result;
     if (category) filters.category = category;
+    if (severity) filters.severity = severity;
     if (from) filters.from = from;
     if (to) filters.to = to;
 
@@ -157,6 +163,7 @@ export async function GET(request: NextRequest) {
     }
 
     // JSON format
+    const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
     const jsonData = logs.map((l) => ({
       id: l.id,
       actorName: l.actor?.name || "System",
@@ -165,7 +172,7 @@ export async function GET(request: NextRequest) {
       action: l.action,
       resourceType: l.resourceType,
       resourceId: l.resourceId,
-      details: JSON.parse(l.details),
+      details: safeParse(l.details),
       ipAddress: l.ipAddress,
       userAgent: l.userAgent,
       result: l.result,

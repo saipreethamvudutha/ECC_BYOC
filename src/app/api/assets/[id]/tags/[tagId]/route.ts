@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function DELETE(
   request: NextRequest,
@@ -52,21 +53,20 @@ export async function DELETE(
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      tenantId: session.tenantId,
-      actorId: session.id,
-      actorType: "user",
-      action: "asset.tag.removed",
-      resourceType: "asset",
-      resourceId: id,
-      result: "success",
-      details: JSON.stringify({
-        tagId,
-        key: assetTag.tag.key,
-        value: assetTag.tag.value,
-      }),
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "asset.tag.removed",
+    resourceType: "asset",
+    resourceId: id,
+    result: "success",
+    details: {
+      tagId,
+      key: assetTag.tag.key,
+      value: assetTag.tag.value,
     },
+    request,
   });
 
   return NextResponse.json({ success: true });

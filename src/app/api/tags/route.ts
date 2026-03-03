@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "asset.tag.manage"
   );
   if (!allowed) {
