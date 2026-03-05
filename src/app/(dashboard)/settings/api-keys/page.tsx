@@ -332,7 +332,7 @@ export default function ApiKeysPage() {
             color: expiringSoon > 0 ? "text-yellow-400" : "text-slate-400",
           },
         ].map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} className="stat-card">
             <CardContent className="p-4 flex items-center gap-4">
               <div
                 className={cn(

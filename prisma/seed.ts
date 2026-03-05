@@ -679,6 +679,114 @@ async function main() {
   }
   console.log(`   ✅ ${sessionDefinitions.length} demo sessions seeded\n`);
 
+  // ─── 14. Seed Compliance Frameworks & Controls ──────────────────
+  console.log("📋 Seeding compliance frameworks...");
+
+  // Clean existing compliance data for re-seed
+  await prisma.complianceControl.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.complianceFramework.deleteMany({ where: { tenantId: tenant.id } });
+
+  const gdprFw = await prisma.complianceFramework.create({
+    data: {
+      id: uuid(),
+      tenantId: tenant.id,
+      name: "GDPR",
+      version: "2016/679",
+      description: "General Data Protection Regulation — EU data privacy and security law",
+      isActive: true,
+    },
+  });
+
+  const pciDssFw = await prisma.complianceFramework.create({
+    data: {
+      id: uuid(),
+      tenantId: tenant.id,
+      name: "PCI DSS",
+      version: "4.0",
+      description: "Payment Card Industry Data Security Standard",
+      isActive: true,
+    },
+  });
+
+  const hipaaFw = await prisma.complianceFramework.create({
+    data: {
+      id: uuid(),
+      tenantId: tenant.id,
+      name: "HIPAA",
+      version: "2013",
+      description: "Health Insurance Portability and Accountability Act — Security Rule",
+      isActive: true,
+    },
+  });
+
+  // GDPR controls (10 controls)
+  const gdprControls = [
+    { controlId: "Art. 5", title: "Principles of Processing", category: "Data Protection", status: "compliant" },
+    { controlId: "Art. 6", title: "Lawfulness of Processing", category: "Data Protection", status: "compliant" },
+    { controlId: "Art. 12", title: "Transparent Communication", category: "Transparency", status: "compliant" },
+    { controlId: "Art. 17", title: "Right to Erasure", category: "Data Subject Rights", status: "partially_compliant" },
+    { controlId: "Art. 20", title: "Right to Data Portability", category: "Data Subject Rights", status: "partially_compliant" },
+    { controlId: "Art. 25", title: "Data Protection by Design", category: "Technical Measures", status: "compliant" },
+    { controlId: "Art. 30", title: "Records of Processing", category: "Documentation", status: "compliant" },
+    { controlId: "Art. 32", title: "Security of Processing", category: "Technical Measures", status: "compliant" },
+    { controlId: "Art. 33", title: "Breach Notification (72h)", category: "Incident Response", status: "non_compliant" },
+    { controlId: "Art. 35", title: "Data Protection Impact Assessment", category: "Risk Assessment", status: "not_assessed" },
+  ];
+
+  // PCI DSS controls (12 controls)
+  const pciDssControls = [
+    { controlId: "Req. 1", title: "Install and Maintain Network Security Controls", category: "Network Security", status: "compliant" },
+    { controlId: "Req. 2", title: "Apply Secure Configurations", category: "System Security", status: "compliant" },
+    { controlId: "Req. 3", title: "Protect Stored Account Data", category: "Data Protection", status: "partially_compliant" },
+    { controlId: "Req. 4", title: "Protect Cardholder Data in Transit", category: "Encryption", status: "compliant" },
+    { controlId: "Req. 5", title: "Protect Against Malicious Software", category: "Malware Protection", status: "compliant" },
+    { controlId: "Req. 6", title: "Develop and Maintain Secure Systems", category: "Secure Development", status: "partially_compliant" },
+    { controlId: "Req. 7", title: "Restrict Access by Business Need", category: "Access Control", status: "compliant" },
+    { controlId: "Req. 8", title: "Identify Users and Authenticate", category: "Authentication", status: "compliant" },
+    { controlId: "Req. 9", title: "Restrict Physical Access", category: "Physical Security", status: "not_assessed" },
+    { controlId: "Req. 10", title: "Log and Monitor Access", category: "Monitoring", status: "compliant" },
+    { controlId: "Req. 11", title: "Test Security Regularly", category: "Security Testing", status: "non_compliant" },
+    { controlId: "Req. 12", title: "Maintain Information Security Policy", category: "Policy", status: "partially_compliant" },
+  ];
+
+  // HIPAA controls (11 controls)
+  const hipaaControls = [
+    { controlId: "164.308(a)(1)", title: "Security Management Process", category: "Administrative", status: "compliant" },
+    { controlId: "164.308(a)(3)", title: "Workforce Security", category: "Administrative", status: "compliant" },
+    { controlId: "164.308(a)(4)", title: "Information Access Management", category: "Administrative", status: "partially_compliant" },
+    { controlId: "164.308(a)(5)", title: "Security Awareness Training", category: "Administrative", status: "non_compliant" },
+    { controlId: "164.308(a)(6)", title: "Security Incident Procedures", category: "Administrative", status: "partially_compliant" },
+    { controlId: "164.308(a)(7)", title: "Contingency Plan", category: "Administrative", status: "not_assessed" },
+    { controlId: "164.310(a)", title: "Facility Access Controls", category: "Physical", status: "compliant" },
+    { controlId: "164.310(d)", title: "Device and Media Controls", category: "Physical", status: "compliant" },
+    { controlId: "164.312(a)", title: "Access Control (Technical)", category: "Technical", status: "compliant" },
+    { controlId: "164.312(c)", title: "Integrity Controls", category: "Technical", status: "compliant" },
+    { controlId: "164.312(e)", title: "Transmission Security", category: "Technical", status: "compliant" },
+  ];
+
+  const allControls = [
+    ...gdprControls.map(c => ({ ...c, frameworkId: gdprFw.id })),
+    ...pciDssControls.map(c => ({ ...c, frameworkId: pciDssFw.id })),
+    ...hipaaControls.map(c => ({ ...c, frameworkId: hipaaFw.id })),
+  ];
+
+  for (const ctrl of allControls) {
+    await prisma.complianceControl.create({
+      data: {
+        id: uuid(),
+        tenantId: tenant.id,
+        frameworkId: ctrl.frameworkId,
+        controlId: ctrl.controlId,
+        title: ctrl.title,
+        category: ctrl.category,
+        status: ctrl.status,
+        lastAssessedAt: ctrl.status !== "not_assessed" ? new Date(Date.now() - Math.random() * 7 * DAY) : null,
+        nextReviewAt: new Date(Date.now() + 30 * DAY + Math.random() * 60 * DAY),
+      },
+    });
+  }
+  console.log(`   ✅ 3 frameworks, ${allControls.length} controls seeded\n`);
+
   // ─── Summary ─────────────────────────────────────────────────────
   console.log("═══════════════════════════════════════════════════════════");
   console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 4)");

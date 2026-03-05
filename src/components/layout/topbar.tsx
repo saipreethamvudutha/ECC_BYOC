@@ -64,6 +64,7 @@ export function Topbar({ user }: TopbarProps) {
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-slate-800/50 transition-all cursor-pointer"
+            data-testid="user-menu-button"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">
               {user?.name?.charAt(0) || "U"}
@@ -96,6 +97,7 @@ export function Topbar({ user }: TopbarProps) {
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-slate-800 transition-all"
+                data-testid="sign-out-button"
               >
                 <LogOut className="w-4 h-4" />
                 Sign out

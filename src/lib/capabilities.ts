@@ -1,7 +1,7 @@
 /**
  * BYOC Capability Registry v2
  *
- * 39 capabilities across 8 modules. Each capability is a named,
+ * 42 capabilities across 8 modules. Each capability is a named,
  * atomic ability that can be assigned to roles.
  *
  * This file is the single source of truth for all capabilities.
@@ -99,7 +99,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
     name: "Platform Administrator",
     description: "Tenant owner. Unrestricted. Maximum 2 per organization.",
     maxAssignments: 2,
-    capabilities: CAPABILITIES.map((c) => c.id), // All 39
+    capabilities: CAPABILITIES.map((c) => c.id), // All 42
   },
   {
     slug: "org-admin",
