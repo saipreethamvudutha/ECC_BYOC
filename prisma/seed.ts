@@ -787,17 +787,124 @@ async function main() {
   }
   console.log(`   ✅ 3 frameworks, ${allControls.length} controls seeded\n`);
 
+  // ─── 15. Clean Up Leftover Test Data ──────────────────────────────
+  console.log("🧹 Cleaning up leftover test data...");
+
+  // Remove non-builtin custom roles (leftover from E2E tests)
+  const customRoleCleanup = await prisma.role.deleteMany({
+    where: { tenantId: tenant.id, isBuiltin: false },
+  });
+  if (customRoleCleanup.count > 0) {
+    console.log(`   🧹 Removed ${customRoleCleanup.count} leftover custom roles`);
+  }
+
+  // Remove test users (anyone not in the seed list)
+  const seedEmails = ["admin@exargen.com", "analyst@exargen.com", "auditor@exargen.com", "viewer@exargen.com", "orgadmin@exargen.com"];
+  const testUserCleanup = await prisma.user.deleteMany({
+    where: { tenantId: tenant.id, email: { notIn: seedEmails } },
+  });
+  if (testUserCleanup.count > 0) {
+    console.log(`   🧹 Removed ${testUserCleanup.count} leftover test users`);
+  }
+  console.log("   ✅ Cleanup complete\n");
+
+  // ─── 16. Seed Demo Users (4 roles for manual testing) ────────────
+  console.log("👥 Creating demo users with different roles...");
+
+  const demoUsers = [
+    {
+      email: "analyst@exargen.com",
+      name: "Sarah Chen",
+      password: "Analyst123!",
+      department: "Security Operations",
+      roleSlug: "security-analyst",
+      scopeName: "Production Only",
+    },
+    {
+      email: "auditor@exargen.com",
+      name: "James Wilson",
+      password: "Auditor123!",
+      department: "Compliance & Audit",
+      roleSlug: "auditor",
+      scopeName: "Global",
+    },
+    {
+      email: "viewer@exargen.com",
+      name: "Emily Rodriguez",
+      password: "Viewer123!",
+      department: "Executive",
+      roleSlug: "viewer",
+      scopeName: "EU Operations",
+    },
+    {
+      email: "orgadmin@exargen.com",
+      name: "Michael Park",
+      password: "OrgAdmin123!",
+      department: "IT Administration",
+      roleSlug: "org-admin",
+      scopeName: "Global",
+    },
+  ];
+
+  for (const userDef of demoUsers) {
+    const userHash = await bcrypt.hash(userDef.password, 12);
+
+    const demoUser = await prisma.user.upsert({
+      where: { tenantId_email: { tenantId: tenant.id, email: userDef.email } },
+      update: { passwordHash: userHash, name: userDef.name, department: userDef.department },
+      create: {
+        id: uuid(),
+        tenantId: tenant.id,
+        email: userDef.email,
+        name: userDef.name,
+        passwordHash: userHash,
+        status: "active",
+        mfaEnabled: false,
+        department: userDef.department,
+      },
+    });
+
+    // Assign role
+    const demoRoleId = roleMap[userDef.roleSlug];
+    if (demoRoleId) {
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: demoUser.id, roleId: demoRoleId } },
+        update: {},
+        create: { id: uuid(), userId: demoUser.id, roleId: demoRoleId },
+      });
+    }
+
+    // Assign scope
+    const demoScope = await prisma.scope.findFirst({
+      where: { tenantId: tenant.id, name: userDef.scopeName },
+    });
+    if (demoScope) {
+      await prisma.userScope.upsert({
+        where: { userId_scopeId: { userId: demoUser.id, scopeId: demoScope.id } },
+        update: {},
+        create: { userId: demoUser.id, scopeId: demoScope.id },
+      });
+    }
+
+    console.log(`   👤 ${demoUser.name} (${demoUser.email}) → ${userDef.roleSlug} / ${userDef.scopeName}`);
+  }
+  console.log(`   ✅ ${demoUsers.length} demo users created\n`);
+
   // ─── Summary ─────────────────────────────────────────────────────
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 4)");
+  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 4+)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  ${CAPABILITIES.length} capabilities · ${BUILTIN_ROLES.length} roles · 6 scopes`);
   console.log(`  ${tagDefinitions.length} tags · ${assetDefinitions.length} assets · ${autoTagRules.length} auto-tag rules`);
   console.log(`  ${auditEvents.length} audit events (hash-chained) · ${sessionDefinitions.length} sessions`);
-  console.log("  1 user (Super Admin)");
+  console.log(`  5 users (1 admin + ${demoUsers.length} demo users)`);
   console.log("");
   console.log("  Login Credentials:");
-  console.log("  └─ Platform Admin:  admin@exargen.com / Admin123!");
+  console.log("  ├─ Platform Admin:     admin@exargen.com    / Admin123!");
+  console.log("  ├─ Security Analyst:   analyst@exargen.com  / Analyst123!");
+  console.log("  ├─ Auditor:            auditor@exargen.com  / Auditor123!");
+  console.log("  ├─ Viewer:             viewer@exargen.com   / Viewer123!");
+  console.log("  └─ Org Admin:          orgadmin@exargen.com / OrgAdmin123!");
   console.log("═══════════════════════════════════════════════════════════");
 }
 

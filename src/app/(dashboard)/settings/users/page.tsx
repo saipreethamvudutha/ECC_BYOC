@@ -883,7 +883,7 @@ export default function UsersPage() {
           ) : (
             // Invite form
             <>
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 py-2 overflow-y-auto min-h-0">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-300">Full Name</label>
                   <Input
@@ -905,7 +905,7 @@ export default function UsersPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-300">Role</label>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
                     {roles.map((role) => (
                       <button
                         key={role.id}

@@ -35,8 +35,8 @@ test.describe.serial("User Management", () => {
     await expect(page.locator("text=Pending Invites")).toBeVisible();
     await expect(page.locator("text=MFA Enabled")).toBeVisible();
 
-    // Admin user should be listed
-    await expect(page.locator(`text=${ADMIN_EMAIL}`)).toBeVisible();
+    // Admin user should be listed (exact match — "orgadmin@..." also contains "admin@...")
+    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).toBeVisible();
 
     // Table column headers should be present (use visible div/span to avoid matching hidden option elements)
     await expect(page.locator("text=User").first()).toBeVisible();
@@ -53,8 +53,8 @@ test.describe.serial("User Management", () => {
     await navigateTo(page, USERS_URL);
 
     // The admin user row should display the Platform Administrator badge
-    // Use admin email row to scope, avoiding matching hidden <option> elements in dropdowns
-    const adminUserRow = page.locator(`text=${ADMIN_EMAIL}`).locator("..").locator("..");
+    // Use exact match to avoid "orgadmin@exargen.com" also containing "admin@exargen.com"
+    const adminUserRow = page.getByText(ADMIN_EMAIL, { exact: true }).locator("..").locator("..");
     await expect(adminUserRow.locator("text=Platform Administrator")).toBeVisible({ timeout: 15000 });
 
     // Admin should have "active" status
@@ -153,7 +153,7 @@ test.describe.serial("User Management", () => {
     await navigateTo(page, USERS_URL);
 
     // Wait for user list to load
-    await page.waitForSelector(`text=${ADMIN_EMAIL}`, { timeout: 10000 });
+    await page.getByText(ADMIN_EMAIL, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Type in the search field
     const searchInput = page.locator(
@@ -168,14 +168,14 @@ test.describe.serial("User Management", () => {
     await expect(page.locator(`text=${TEST_USER_EMAIL}`)).toBeVisible();
 
     // Admin user should NOT be visible (filtered out)
-    await expect(page.locator(`text=${ADMIN_EMAIL}`)).not.toBeVisible();
+    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).not.toBeVisible();
   });
 
   test("should search users by email", async ({ page }) => {
     await loginAsAdmin(page);
     await navigateTo(page, USERS_URL);
 
-    await page.waitForSelector(`text=${ADMIN_EMAIL}`, { timeout: 10000 });
+    await page.getByText(ADMIN_EMAIL, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     const searchInput = page.locator(
       'input[placeholder="Search users by name or email..."]'
@@ -185,7 +185,7 @@ test.describe.serial("User Management", () => {
     await page.waitForTimeout(500);
 
     // Admin user should be visible
-    await expect(page.locator(`text=${ADMIN_EMAIL}`)).toBeVisible();
+    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).toBeVisible();
 
     // Test user should NOT be visible
     await expect(page.locator(`text=${TEST_USER_EMAIL}`)).not.toBeVisible();
@@ -195,7 +195,7 @@ test.describe.serial("User Management", () => {
     await loginAsAdmin(page);
     await navigateTo(page, USERS_URL);
 
-    await page.waitForSelector(`text=${ADMIN_EMAIL}`, { timeout: 10000 });
+    await page.getByText(ADMIN_EMAIL, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Find the status filter dropdown (it has "All Statuses" as default)
     const statusFilter = page.locator('select:has(option:text("All Statuses"))');
@@ -210,7 +210,7 @@ test.describe.serial("User Management", () => {
     await expect(page.locator(`text=${TEST_USER_EMAIL}`)).toBeVisible();
 
     // Admin user (active) should NOT be visible
-    await expect(page.locator(`text=${ADMIN_EMAIL}`)).not.toBeVisible();
+    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).not.toBeVisible();
 
     // Filter by "Active" status
     await statusFilter.selectOption("active");
@@ -218,7 +218,7 @@ test.describe.serial("User Management", () => {
     await page.waitForTimeout(500);
 
     // Now admin should be visible and test user should not
-    await expect(page.locator(`text=${ADMIN_EMAIL}`)).toBeVisible();
+    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).toBeVisible();
     await expect(page.locator(`text=${TEST_USER_EMAIL}`)).not.toBeVisible();
   });
 
@@ -310,12 +310,12 @@ test.describe.serial("User Management", () => {
     await loginAsAdmin(page);
     await navigateTo(page, USERS_URL);
 
-    await page.waitForSelector(`text=${ADMIN_EMAIL}`, { timeout: 10000 });
+    await page.getByText(ADMIN_EMAIL, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Find the admin user row and click its actions menu (MoreVertical button)
     // The admin row contains the admin email - find the row and its action button
     const adminRow = page
-      .locator(`text=${ADMIN_EMAIL}`)
+      .getByText(ADMIN_EMAIL, { exact: true })
       .locator("xpath=ancestor::div[contains(@class, 'grid')]")
       .first();
 
@@ -424,7 +424,7 @@ test.describe.serial("User Management", () => {
     await loginAsAdmin(page);
     await navigateTo(page, USERS_URL);
 
-    await page.waitForSelector(`text=${ADMIN_EMAIL}`, { timeout: 10000 });
+    await page.getByText(ADMIN_EMAIL, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
 
     // Get the expected counts from API
     const usersResponse = await apiCall(page, "GET", "/api/users");
