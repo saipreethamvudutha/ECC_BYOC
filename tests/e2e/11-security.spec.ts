@@ -276,8 +276,8 @@ test.describe("Security Testing", () => {
       return { status: res.status, body: JSON.stringify(data) };
     });
 
-    // Should get 401 or 429
-    expect([401, 429]).toContain(result.status);
+    // Should get 401, 423 (account locked), or 429 (rate limited)
+    expect([401, 423, 429]).toContain(result.status);
 
     // The response body should NOT contain sensitive information
     const body = result.body.toLowerCase();

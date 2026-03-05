@@ -38,6 +38,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 interface RoleOption {
   id: string;
@@ -102,6 +103,9 @@ const authProviderLabels: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  const { can } = useCapabilities();
+  const canManageUsers = can("admin.user.manage");
+
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -478,10 +482,17 @@ export default function UsersPage() {
               className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
             />
           </div>
-          <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setInviteError(""); }}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            Invite User
-          </Button>
+          {canManageUsers ? (
+            <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setInviteError(""); }}>
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite User
+            </Button>
+          ) : (
+            <Button disabled className="opacity-50 cursor-not-allowed" title="You don't have permission to invite users">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite User
+            </Button>
+          )}
         </div>
 
         {/* Filter Dropdowns */}

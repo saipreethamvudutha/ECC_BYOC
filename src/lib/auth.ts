@@ -59,7 +59,7 @@ export async function authenticateUser(
 
   if (!user || !user.passwordHash) return null;
 
-  // Check account lockout
+  // Check account lockout — return specific error so UI can distinguish
   const lockoutStatus = await checkAccountLockout(user.id);
   if (lockoutStatus.locked) {
     await createAuditLog({
@@ -71,7 +71,8 @@ export async function authenticateUser(
       details: { reason: "account_locked", remainingSeconds: lockoutStatus.remainingSeconds },
       request,
     });
-    return null;
+    // Throw specific error so login route can show distinct message
+    throw new Error(`ACCOUNT_LOCKED:${lockoutStatus.remainingSeconds}`);
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);

@@ -49,7 +49,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await authenticateUser(email, password, request);
+    let result;
+    try {
+      result = await authenticateUser(email, password, request);
+    } catch (authError) {
+      const errMsg = authError instanceof Error ? authError.message : "";
+      if (errMsg.startsWith("ACCOUNT_LOCKED:")) {
+        const remaining = parseInt(errMsg.split(":")[1]) || 900;
+        const minutes = Math.ceil(remaining / 60);
+        return NextResponse.json(
+          { error: `Account is locked due to too many failed attempts. Please try again in ${minutes} minute${minutes > 1 ? "s" : ""}.` },
+          { status: 423 }
+        );
+      }
+      throw authError;
+    }
 
     if (!result) {
       return NextResponse.json(
