@@ -19,29 +19,37 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
+import { useCapabilities } from "@/hooks/useCapabilities";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
-  permission?: string;
+  /** v2 capability required to see this nav item. Omit = always visible. */
+  capability?: string;
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Scans", href: "/scans", icon: Scan, permission: "scans.jobs:view" },
-  { label: "Assets", href: "/assets", icon: Server, permission: "assets.inventory:view" },
-  { label: "Risk Scoring", href: "/risk-scoring", icon: Target, permission: "risk.scores:view" },
-  { label: "Compliance", href: "/compliance", icon: ShieldCheck, permission: "compliance.frameworks:view" },
-  { label: "Reports", href: "/reports", icon: FileText, permission: "reports.generated:view" },
-  { label: "AI Actions", href: "/ai-actions", icon: Bot, permission: "ai.actions:view" },
-  { label: "SIEM", href: "/siem", icon: Bell, permission: "siem.events:view" },
-  { label: "Settings", href: "/settings/users", icon: Settings, permission: "settings.users:view" },
+  { label: "Dashboard", href: "/", icon: LayoutDashboard, capability: "dash.view" },
+  { label: "Scans", href: "/scans", icon: Scan, capability: "scan.view" },
+  { label: "Assets", href: "/assets", icon: Server, capability: "asset.view" },
+  { label: "Risk Scoring", href: "/risk-scoring", icon: Target, capability: "risk.view" },
+  { label: "Compliance", href: "/compliance", icon: ShieldCheck, capability: "scan.policy.view" },
+  { label: "Reports", href: "/reports", icon: FileText, capability: "report.view" },
+  { label: "AI Actions", href: "/ai-actions", icon: Bot, capability: "ai.view" },
+  { label: "SIEM", href: "/siem", icon: Bell, capability: "siem.view" },
+  { label: "Settings", href: "/settings/users", icon: Settings, capability: "admin.user.view" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { can, loading } = useCapabilities();
+
+  // Filter nav items based on user capabilities
+  const visibleItems = navItems.filter(
+    (item) => !item.capability || loading || can(item.capability)
+  );
 
   return (
     <aside
@@ -67,9 +75,9 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation — capability-gated */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.href === "/"
               ? pathname === "/"

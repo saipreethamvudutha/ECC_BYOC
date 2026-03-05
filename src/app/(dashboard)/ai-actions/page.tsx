@@ -16,6 +16,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface AiActionItem {
   id: string;
@@ -97,6 +98,7 @@ export default function AiActionsPage() {
   const statuses = ["pending", "approved", "rejected", "executed", "expired", "failed"];
 
   return (
+    <PageGate capability="ai.view" title="AI Actions">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -227,5 +229,6 @@ export default function AiActionsPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

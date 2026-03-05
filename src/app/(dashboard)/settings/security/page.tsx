@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface AuditLogEntry {
   id: string;
@@ -295,6 +296,7 @@ export default function SecurityDashboardPage() {
   }
 
   return (
+    <PageGate capability="admin.audit.view" title="Security Dashboard">
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -706,5 +708,6 @@ export default function SecurityDashboardPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

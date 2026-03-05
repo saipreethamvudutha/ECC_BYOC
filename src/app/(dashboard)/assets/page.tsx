@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface AssetTag {
   id: string;
@@ -149,6 +150,7 @@ export default function AssetsPage() {
   }
 
   return (
+    <PageGate capability="asset.view" title="Assets">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -385,5 +387,6 @@ export default function AssetsPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

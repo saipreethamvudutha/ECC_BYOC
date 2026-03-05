@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface RoleOption {
   id: string;
@@ -448,6 +449,7 @@ export default function UsersPage() {
   const mfaCount = users.filter((u) => u.mfaEnabled).length;
 
   return (
+    <PageGate capability="admin.user.view" title="User Management">
     <div className="space-y-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1260,5 +1262,6 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageGate>
   );
 }

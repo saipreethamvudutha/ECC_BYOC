@@ -18,6 +18,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn, complianceScoreColor, formatRelativeTime, statusColor } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 import type { DashboardStats, ComplianceOverview, RecentActivity, SeverityCount } from "@/types";
 
 interface DashboardData {
@@ -143,6 +144,7 @@ export default function DashboardPage() {
   ];
 
   return (
+    <PageGate capability="dash.view" title="Dashboard">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -358,5 +360,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

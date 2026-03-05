@@ -26,6 +26,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface ApiKeyItem {
   id: string;
@@ -309,6 +310,7 @@ export default function ApiKeysPage() {
   }
 
   return (
+    <PageGate capability="admin.apikey.manage" title="API Keys">
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -878,5 +880,6 @@ export default function ApiKeysPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageGate>
   );
 }

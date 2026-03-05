@@ -29,6 +29,7 @@ import {
   Tag,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -441,6 +442,7 @@ export default function ScopesPage() {
   // -------------------------------------------------------------------------
 
   return (
+    <PageGate capability="admin.role.view" title="Scopes">
     <div className="space-y-6">
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -956,5 +958,6 @@ export default function ScopesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageGate>
   );
 }

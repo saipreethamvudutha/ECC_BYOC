@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { CAPABILITY_MODULES } from "@/lib/capabilities";
+import { PageGate } from "@/components/rbac/PageGate";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -620,6 +621,7 @@ export default function RolesPage() {
   // ═══════════════════════════════════════════════════════════════
 
   return (
+    <PageGate capability="admin.role.view" title="Role Management">
     <div className="space-y-6">
       {/* ─── Summary Stats ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1299,5 +1301,6 @@ export default function RolesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageGate>
   );
 }

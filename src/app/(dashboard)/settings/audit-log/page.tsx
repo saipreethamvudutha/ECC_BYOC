@@ -21,6 +21,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface AuditLogItem {
   id: string;
@@ -203,6 +204,7 @@ export default function AuditLogPage() {
   }
 
   return (
+    <PageGate capability="admin.audit.view" title="Audit Log">
     <div className="space-y-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -571,5 +573,6 @@ export default function AuditLogPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

@@ -13,6 +13,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface SiemEvent {
   id: string;
@@ -122,6 +123,7 @@ export default function SiemPage() {
   const severities = ["critical", "high", "medium", "low", "info"];
 
   return (
+    <PageGate capability="siem.view" title="SIEM">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -320,5 +322,6 @@ export default function SiemPage() {
         </Card>
       )}
     </div>
+    </PageGate>
   );
 }

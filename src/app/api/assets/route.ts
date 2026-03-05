@@ -12,6 +12,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Check asset.view capability before loading any data
+  const hasAssetView = await rbac.checkCapability(session.id, session.tenantId, "asset.view");
+  if (!hasAssetView) {
+    return NextResponse.json(
+      { error: "Forbidden: requires asset.view capability" },
+      { status: 403 }
+    );
+  }
+
   // Load user's RBAC profile for scope filtering
   const profile = await rbac.loadProfile(session.id, session.tenantId);
 

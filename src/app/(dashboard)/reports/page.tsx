@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface ReportItem {
   id: string;
@@ -107,6 +108,7 @@ export default function ReportsPage() {
   }
 
   return (
+    <PageGate capability="report.view" title="Reports">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -215,5 +217,6 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }

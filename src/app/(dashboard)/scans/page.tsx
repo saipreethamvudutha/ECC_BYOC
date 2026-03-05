@@ -24,6 +24,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface ScanItem {
   id: string;
@@ -114,6 +115,7 @@ export default function ScansPage() {
   }
 
   return (
+    <PageGate capability="scan.view" title="Scans">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
@@ -277,5 +279,6 @@ export default function ScansPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </PageGate>
   );
 }

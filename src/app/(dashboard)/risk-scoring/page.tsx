@@ -14,6 +14,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageGate } from "@/components/rbac/PageGate";
 
 interface DashboardStats {
   totalAssets: number;
@@ -126,6 +127,7 @@ export default function RiskScoringPage() {
   ];
 
   return (
+    <PageGate capability="risk.view" title="Risk Scoring">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div>
@@ -293,5 +295,6 @@ export default function RiskScoringPage() {
         </CardContent>
       </Card>
     </div>
+    </PageGate>
   );
 }
