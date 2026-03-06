@@ -22,12 +22,12 @@ test.describe("Feature Modules", () => {
     // Verify the heading
     await expect(page.getByText("Compliance Center")).toBeVisible();
 
-    // Verify all 5 compliance frameworks are shown
+    // Verify all 5 compliance frameworks are shown (use heading role to avoid matching <option> elements)
     await expect(page.getByRole("heading", { name: "GDPR", exact: true })).toBeVisible();
-    await expect(page.getByText("PCI DSS", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("HIPAA", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("CIS Controls", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("NIST CSF", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "PCI DSS", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "HIPAA", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CIS Controls", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "NIST CSF", exact: true })).toBeVisible();
 
     // Verify framework cards have score percentages (e.g., "60%")
     // Use text pattern to find any percentage display on the page

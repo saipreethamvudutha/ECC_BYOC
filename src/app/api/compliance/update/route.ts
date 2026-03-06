@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
-  const { controlId, status, notes, evidence } = await request.json();
+  const { controlId, status, notes, evidence, remediationPlan, dueDate } = await request.json();
 
   if (!controlId || !status) {
     return NextResponse.json(
@@ -30,6 +30,22 @@ export async function PATCH(request: NextRequest) {
   if (!validStatuses.includes(status)) {
     return NextResponse.json(
       { error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  // Validate evidence is array of strings if provided
+  if (evidence !== undefined && (!Array.isArray(evidence) || !evidence.every((e: unknown) => typeof e === "string"))) {
+    return NextResponse.json(
+      { error: "Evidence must be an array of strings" },
+      { status: 400 }
+    );
+  }
+
+  // Validate dueDate is a valid date if provided
+  if (dueDate !== undefined && dueDate !== null && isNaN(Date.parse(dueDate))) {
+    return NextResponse.json(
+      { error: "dueDate must be a valid ISO date string" },
       { status: 400 }
     );
   }
@@ -52,10 +68,11 @@ export async function PATCH(request: NextRequest) {
       notes: notes ?? control.notes,
       lastAssessedAt: new Date(),
       evidence: evidence ? JSON.stringify(evidence) : control.evidence,
+      nextReviewAt: dueDate ? new Date(dueDate) : control.nextReviewAt,
     },
   });
 
-  // Create assessment record
+  // Create assessment record with full data
   await prisma.complianceAssessment.create({
     data: {
       tenantId: session.tenantId,
@@ -63,6 +80,9 @@ export async function PATCH(request: NextRequest) {
       assessorId: session.id,
       status,
       findings: notes || null,
+      evidence: evidence ? JSON.stringify(evidence) : "[]",
+      remediationPlan: remediationPlan || null,
+      dueDate: dueDate ? new Date(dueDate) : null,
     },
   });
 
@@ -78,6 +98,9 @@ export async function PATCH(request: NextRequest) {
       controlId: control.controlId,
       previousStatus,
       newStatus: status,
+      evidenceCount: evidence?.length || 0,
+      hasFindings: !!notes,
+      hasRemediationPlan: !!remediationPlan,
     },
     request,
   });

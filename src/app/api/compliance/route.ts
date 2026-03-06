@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
@@ -6,7 +6,7 @@ import { rbac } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,8 +17,14 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const includeInactive = searchParams.get("includeInactive") === "true";
+
   const frameworks = await prisma.complianceFramework.findMany({
-    where: { tenantId: session.tenantId },
+    where: {
+      tenantId: session.tenantId,
+      ...(includeInactive ? {} : { isActive: true }),
+    },
     include: {
       controls: {
         orderBy: { controlId: "asc" },
@@ -53,6 +59,9 @@ export async function GET() {
         description: c.description,
         category: c.category,
         status: c.status,
+        evidence: JSON.parse(c.evidence || "[]") as string[],
+        notes: c.notes,
+        assignedTo: c.assignedTo,
         lastAssessedAt: c.lastAssessedAt?.toISOString() || null,
         nextReviewAt: c.nextReviewAt?.toISOString() || null,
       })),
