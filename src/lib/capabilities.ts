@@ -1,7 +1,7 @@
 /**
  * BYOC Capability Registry v2
  *
- * 42 capabilities across 8 modules. Each capability is a named,
+ * 46 capabilities across 9 modules. Each capability is a named,
  * atomic ability that can be assigned to roles.
  *
  * This file is the single source of truth for all capabilities.
@@ -53,6 +53,12 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "report.template.manage", module: "report", name: "Manage Templates", description: "Create and edit report templates", riskLevel: "medium" },
   { id: "report.export", module: "report", name: "Export Reports", description: "Download reports as CSV/PDF", riskLevel: "low" },
 
+  // ── Compliance (4) ──
+  { id: "compliance.view", module: "compliance", name: "View Compliance", description: "View compliance frameworks, controls, and assessment statuses", riskLevel: "low" },
+  { id: "compliance.assess", module: "compliance", name: "Assess Controls", description: "Update control assessment status, findings, and evidence", riskLevel: "medium" },
+  { id: "compliance.manage", module: "compliance", name: "Manage Frameworks", description: "Manage compliance framework settings and activation", riskLevel: "high" },
+  { id: "compliance.export", module: "compliance", name: "Export Compliance", description: "Export compliance reports and audit data", riskLevel: "low" },
+
   // ── AI Actions (4) ──
   { id: "ai.view", module: "ai", name: "View AI Actions", description: "See the AI action feed and history", riskLevel: "low" },
   { id: "ai.approve.standard", module: "ai", name: "Approve Standard AI Actions", description: "Approve medium-risk AI recommendations", riskLevel: "medium" },
@@ -99,7 +105,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
     name: "Platform Administrator",
     description: "Tenant owner. Unrestricted. Maximum 2 per organization.",
     maxAssignments: 2,
-    capabilities: CAPABILITIES.map((c) => c.id), // All 42
+    capabilities: CAPABILITIES.map((c) => c.id), // All 46
   },
   {
     slug: "org-admin",
@@ -120,6 +126,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "scan.policy.view",
       "asset.view", "asset.edit", "asset.import", "asset.export",
       "risk.view", "risk.override",
+      "compliance.view", "compliance.assess", "compliance.export",
       "report.view", "report.create", "report.schedule", "report.export",
       "ai.view", "ai.approve.standard",
       "siem.view", "siem.acknowledge", "siem.escalate",
@@ -137,6 +144,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "scan.policy.view",
       "asset.view", "asset.export",
       "risk.view",
+      "compliance.view", "compliance.export",
       "report.view", "report.export",
       "ai.view",
       "siem.view",
@@ -163,6 +171,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "scan.view",
       "asset.view",
       "risk.view",
+      "compliance.view",
       "report.view",
     ],
   },
@@ -186,6 +195,7 @@ export const CAPABILITY_MODULES = [
   { id: "scan", name: "Scans", icon: "Search" },
   { id: "asset", name: "Assets", icon: "Server" },
   { id: "risk", name: "Risk Scoring", icon: "AlertTriangle" },
+  { id: "compliance", name: "Compliance", icon: "ShieldCheck" },
   { id: "report", name: "Reports", icon: "FileText" },
   { id: "ai", name: "AI Actions", icon: "Brain" },
   { id: "siem", name: "SIEM", icon: "Shield" },

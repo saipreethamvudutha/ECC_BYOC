@@ -719,6 +719,28 @@ async function main() {
     },
   });
 
+  const cisFw = await prisma.complianceFramework.create({
+    data: {
+      id: uuid(),
+      tenantId: tenant.id,
+      name: "CIS Controls",
+      version: "8.1",
+      description: "CIS Critical Security Controls v8.1 — Prioritized cybersecurity best practices",
+      isActive: true,
+    },
+  });
+
+  const nistCsfFw = await prisma.complianceFramework.create({
+    data: {
+      id: uuid(),
+      tenantId: tenant.id,
+      name: "NIST CSF",
+      version: "2.0",
+      description: "NIST Cybersecurity Framework 2.0 — Govern, Identify, Protect, Detect, Respond, Recover",
+      isActive: true,
+    },
+  });
+
   // GDPR controls (10 controls)
   const gdprControls = [
     { controlId: "Art. 5", title: "Principles of Processing", category: "Data Protection", status: "compliant" },
@@ -764,10 +786,66 @@ async function main() {
     { controlId: "164.312(e)", title: "Transmission Security", category: "Technical", status: "compliant" },
   ];
 
+  // CIS Controls v8.1 (18 control groups)
+  const cisControls = [
+    { controlId: "CIS.1", title: "Inventory and Control of Enterprise Assets", category: "Asset Management", status: "compliant" },
+    { controlId: "CIS.2", title: "Inventory and Control of Software Assets", category: "Asset Management", status: "partially_compliant" },
+    { controlId: "CIS.3", title: "Data Protection", category: "Data Protection", status: "partially_compliant" },
+    { controlId: "CIS.4", title: "Secure Configuration of Enterprise Assets and Software", category: "Configuration Management", status: "compliant" },
+    { controlId: "CIS.5", title: "Account Management", category: "Identity & Access", status: "compliant" },
+    { controlId: "CIS.6", title: "Access Control Management", category: "Identity & Access", status: "compliant" },
+    { controlId: "CIS.7", title: "Continuous Vulnerability Management", category: "Vulnerability Management", status: "non_compliant" },
+    { controlId: "CIS.8", title: "Audit Log Management", category: "Audit & Accountability", status: "compliant" },
+    { controlId: "CIS.9", title: "Email and Web Browser Protections", category: "Network Defense", status: "partially_compliant" },
+    { controlId: "CIS.10", title: "Malware Defenses", category: "Endpoint Security", status: "compliant" },
+    { controlId: "CIS.11", title: "Data Recovery", category: "Data Protection", status: "not_assessed" },
+    { controlId: "CIS.12", title: "Network Infrastructure Management", category: "Network Security", status: "compliant" },
+    { controlId: "CIS.13", title: "Network Monitoring and Defense", category: "Network Defense", status: "partially_compliant" },
+    { controlId: "CIS.14", title: "Security Awareness and Skills Training", category: "Workforce Security", status: "non_compliant" },
+    { controlId: "CIS.15", title: "Service Provider Management", category: "Third-Party Risk", status: "not_assessed" },
+    { controlId: "CIS.16", title: "Application Software Security", category: "Secure Development", status: "partially_compliant" },
+    { controlId: "CIS.17", title: "Incident Response Management", category: "Incident Response", status: "compliant" },
+    { controlId: "CIS.18", title: "Penetration Testing", category: "Security Testing", status: "non_compliant" },
+  ];
+
+  // NIST CSF 2.0 (22 category-level controls across 6 functions)
+  const nistCsfControls = [
+    // GOVERN function
+    { controlId: "GV.OC", title: "Organizational Context", category: "GOVERN", status: "compliant" },
+    { controlId: "GV.RM", title: "Risk Management Strategy", category: "GOVERN", status: "partially_compliant" },
+    { controlId: "GV.RR", title: "Roles, Responsibilities, and Authorities", category: "GOVERN", status: "compliant" },
+    { controlId: "GV.PO", title: "Policy", category: "GOVERN", status: "partially_compliant" },
+    { controlId: "GV.OV", title: "Oversight", category: "GOVERN", status: "compliant" },
+    { controlId: "GV.SC", title: "Cybersecurity Supply Chain Risk Management", category: "GOVERN", status: "not_assessed" },
+    // IDENTIFY function
+    { controlId: "ID.AM", title: "Asset Management", category: "IDENTIFY", status: "compliant" },
+    { controlId: "ID.RA", title: "Risk Assessment", category: "IDENTIFY", status: "partially_compliant" },
+    { controlId: "ID.IM", title: "Improvement", category: "IDENTIFY", status: "not_assessed" },
+    // PROTECT function
+    { controlId: "PR.AA", title: "Identity Management, Authentication, and Access Control", category: "PROTECT", status: "compliant" },
+    { controlId: "PR.AT", title: "Awareness and Training", category: "PROTECT", status: "non_compliant" },
+    { controlId: "PR.DS", title: "Data Security", category: "PROTECT", status: "compliant" },
+    { controlId: "PR.PS", title: "Platform Security", category: "PROTECT", status: "compliant" },
+    { controlId: "PR.IR", title: "Technology Infrastructure Resilience", category: "PROTECT", status: "partially_compliant" },
+    // DETECT function
+    { controlId: "DE.CM", title: "Continuous Monitoring", category: "DETECT", status: "partially_compliant" },
+    { controlId: "DE.AE", title: "Adverse Event Analysis", category: "DETECT", status: "compliant" },
+    // RESPOND function
+    { controlId: "RS.MA", title: "Incident Management", category: "RESPOND", status: "compliant" },
+    { controlId: "RS.AN", title: "Incident Analysis", category: "RESPOND", status: "partially_compliant" },
+    { controlId: "RS.CO", title: "Incident Response Reporting and Communication", category: "RESPOND", status: "non_compliant" },
+    { controlId: "RS.MI", title: "Incident Mitigation", category: "RESPOND", status: "compliant" },
+    // RECOVER function
+    { controlId: "RC.RP", title: "Incident Recovery Plan Execution", category: "RECOVER", status: "not_assessed" },
+    { controlId: "RC.CO", title: "Incident Recovery Communication", category: "RECOVER", status: "partially_compliant" },
+  ];
+
   const allControls = [
     ...gdprControls.map(c => ({ ...c, frameworkId: gdprFw.id })),
     ...pciDssControls.map(c => ({ ...c, frameworkId: pciDssFw.id })),
     ...hipaaControls.map(c => ({ ...c, frameworkId: hipaaFw.id })),
+    ...cisControls.map(c => ({ ...c, frameworkId: cisFw.id })),
+    ...nistCsfControls.map(c => ({ ...c, frameworkId: nistCsfFw.id })),
   ];
 
   for (const ctrl of allControls) {
@@ -785,7 +863,7 @@ async function main() {
       },
     });
   }
-  console.log(`   ✅ 3 frameworks, ${allControls.length} controls seeded\n`);
+  console.log(`   ✅ 5 frameworks, ${allControls.length} controls seeded\n`);
 
   // ─── 15. Clean Up Leftover Test Data ──────────────────────────────
   console.log("🧹 Cleaning up leftover test data...");

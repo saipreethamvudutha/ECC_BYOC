@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const allowed = await rbac.checkPermission(
-    session.id, session.tenantId, "risk.override"
+    session.id, session.tenantId, "compliance.assess"
   );
   if (!allowed) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });

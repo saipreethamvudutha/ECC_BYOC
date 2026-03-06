@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   { label: "Scans", href: "/scans", icon: Scan, capability: "scan.view" },
   { label: "Assets", href: "/assets", icon: Server, capability: "asset.view" },
   { label: "Risk Scoring", href: "/risk-scoring", icon: Target, capability: "risk.view" },
-  { label: "Compliance", href: "/compliance", icon: ShieldCheck, capability: "scan.policy.view" },
+  { label: "Compliance", href: "/compliance", icon: ShieldCheck, capability: "compliance.view" },
   { label: "Reports", href: "/reports", icon: FileText, capability: "report.view" },
   { label: "AI Actions", href: "/ai-actions", icon: Bot, capability: "ai.view" },
   { label: "SIEM", href: "/siem", icon: Bell, capability: "siem.view" },

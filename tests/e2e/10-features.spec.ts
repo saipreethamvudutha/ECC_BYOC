@@ -13,7 +13,7 @@ test.describe("Feature Modules", () => {
     await waitForPageReady(page);
   });
 
-  test("should load Compliance page with 3 frameworks (GDPR, PCI DSS, HIPAA)", async ({ page }) => {
+  test("should load Compliance page with 5 frameworks (GDPR, PCI DSS, HIPAA, CIS, NIST)", async ({ page }) => {
     await navigateTo(page, "/compliance");
 
     // Wait for loading to complete
@@ -22,10 +22,12 @@ test.describe("Feature Modules", () => {
     // Verify the heading
     await expect(page.getByText("Compliance Center")).toBeVisible();
 
-    // Verify all 3 compliance frameworks are shown (use exact match to avoid strict mode)
+    // Verify all 5 compliance frameworks are shown
     await expect(page.getByRole("heading", { name: "GDPR", exact: true })).toBeVisible();
     await expect(page.getByText("PCI DSS", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("HIPAA", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("CIS Controls", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("NIST CSF", { exact: true }).first()).toBeVisible();
 
     // Verify framework cards have score percentages (e.g., "60%")
     // Use text pattern to find any percentage display on the page

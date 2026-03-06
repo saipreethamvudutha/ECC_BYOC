@@ -144,7 +144,7 @@ export default function CompliancePage() {
   );
 
   return (
-    <PageGate capability="scan.policy.view" title="Compliance">
+    <PageGate capability="compliance.view" title="Compliance">
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -154,7 +154,7 @@ export default function CompliancePage() {
             Compliance Center
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Track GDPR, PCI DSS, and HIPAA compliance across your organization
+            Track compliance across GDPR, PCI DSS, HIPAA, CIS, and NIST frameworks
           </p>
         </div>
         <Button variant="outline" size="sm">
@@ -163,8 +163,62 @@ export default function CompliancePage() {
         </Button>
       </div>
 
-      {/* Overall Score Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Summary Stats */}
+      {frameworks.length > 0 && (() => {
+        const totalControls = frameworks.reduce((sum, fw) => sum + fw.stats.total, 0);
+        const totalCompliant = frameworks.reduce((sum, fw) => sum + fw.stats.compliant, 0);
+        const totalPartial = frameworks.reduce((sum, fw) => sum + fw.stats.partial, 0);
+        const totalNonCompliant = frameworks.reduce((sum, fw) => sum + fw.stats.nonCompliant, 0);
+        const totalNotAssessed = frameworks.reduce((sum, fw) => sum + fw.stats.notAssessed, 0);
+        const totalNotApplicable = frameworks.reduce((sum, fw) => sum + fw.stats.notApplicable, 0);
+        const applicableTotal = totalControls - totalNotApplicable;
+        const overallScore = applicableTotal > 0
+          ? Math.round(((totalCompliant + totalPartial * 0.5) / applicableTotal) * 100)
+          : 0;
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className={cn("text-2xl font-bold", complianceScoreColor(overallScore))}>{overallScore}%</p>
+                <p className="text-[11px] text-slate-500 mt-1">Overall Score</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-white">{frameworks.length}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Frameworks</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-white">{totalControls}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Total Controls</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-emerald-400">{totalCompliant}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Compliant</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-red-400">{totalNonCompliant}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Non-Compliant</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-slate-400">{totalNotAssessed}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Not Assessed</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
+
+      {/* Framework Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {frameworks.map((fw) => (
           <Card
             key={fw.id}

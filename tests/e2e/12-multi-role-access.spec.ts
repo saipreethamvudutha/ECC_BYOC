@@ -12,9 +12,9 @@ import {
  *
  * Tests RBAC enforcement across all 4 demo user roles:
  *   - Viewer:   4 capabilities (dash.view, risk.view, report.view, report.export)
- *   - Analyst:  25 capabilities (operational SOC role)
- *   - Auditor:  15 capabilities (read-only compliance)
- *   - Admin:    42 capabilities (full access)
+ *   - Analyst:  28 capabilities (operational SOC role)
+ *   - Auditor:  17 capabilities (read-only compliance)
+ *   - Admin:    46 capabilities (full access)
  *
  * Validates:
  *   - Sidebar shows correct nav items per role
@@ -31,9 +31,9 @@ const ADMIN = { email: "admin@exargen.com", password: "Admin123!", name: "Exarge
 
 // ─── Expected Capabilities Per Role ────────────────────────────────
 const VIEWER_CAPS = ["dash.view", "risk.view", "report.view", "report.export"];
-const ANALYST_CAP_COUNT = 25;
-const AUDITOR_CAP_COUNT = 15;
-const ADMIN_CAP_COUNT = 42;
+const ANALYST_CAP_COUNT = 28;
+const AUDITOR_CAP_COUNT = 17;
+const ADMIN_CAP_COUNT = 46;
 
 // ═══════════════════════════════════════════════════════════════════
 // VIEWER TESTS — Most restricted (executives/stakeholders)
@@ -68,6 +68,7 @@ test.describe("Multi-Role: Viewer (4 capabilities)", () => {
     // Viewer should NOT see these items
     await expect(nav.getByText("Scans")).not.toBeVisible();
     await expect(nav.getByText("Assets")).not.toBeVisible();
+    await expect(nav.getByText("Compliance")).not.toBeVisible();
     await expect(nav.getByText("AI Actions")).not.toBeVisible();
     await expect(nav.getByText("SIEM")).not.toBeVisible();
     await expect(nav.getByText("Settings")).not.toBeVisible();
@@ -128,14 +129,14 @@ test.describe("Multi-Role: Viewer (4 capabilities)", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// ANALYST TESTS — Operational SOC role (25 capabilities)
+// ANALYST TESTS — Operational SOC role (28 capabilities)
 // ═══════════════════════════════════════════════════════════════════
-test.describe("Multi-Role: Analyst (25 capabilities)", () => {
+test.describe("Multi-Role: Analyst (28 capabilities)", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, ANALYST.email, ANALYST.password);
   });
 
-  test("analyst should have 25 capabilities and security-analyst role", async ({ page }) => {
+  test("analyst should have 28 capabilities and security-analyst role", async ({ page }) => {
     const result = await apiCall(page, "GET", "/api/auth/me/capabilities");
     expect(result.status).toBe(200);
     const data = result.data as { capabilities: string[]; roles: string[]; globalScope: boolean };
@@ -155,6 +156,7 @@ test.describe("Multi-Role: Analyst (25 capabilities)", () => {
     await expect(nav.getByText("Scans")).toBeVisible();
     await expect(nav.getByText("Assets")).toBeVisible();
     await expect(nav.getByText("Risk Scoring")).toBeVisible();
+    await expect(nav.getByText("Compliance")).toBeVisible();
     await expect(nav.getByText("Reports")).toBeVisible();
     await expect(nav.getByText("AI Actions")).toBeVisible();
     await expect(nav.getByText("SIEM")).toBeVisible();
@@ -213,14 +215,14 @@ test.describe("Multi-Role: Analyst (25 capabilities)", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// AUDITOR TESTS — Read-only compliance role (15 capabilities)
+// AUDITOR TESTS — Read-only compliance role (17 capabilities)
 // ═══════════════════════════════════════════════════════════════════
-test.describe("Multi-Role: Auditor (15 capabilities)", () => {
+test.describe("Multi-Role: Auditor (17 capabilities)", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, AUDITOR.email, AUDITOR.password);
   });
 
-  test("auditor should have 15 capabilities with global scope", async ({ page }) => {
+  test("auditor should have 17 capabilities with global scope", async ({ page }) => {
     const result = await apiCall(page, "GET", "/api/auth/me/capabilities");
     expect(result.status).toBe(200);
     const data = result.data as { capabilities: string[]; roles: string[]; globalScope: boolean };
@@ -240,6 +242,7 @@ test.describe("Multi-Role: Auditor (15 capabilities)", () => {
     await expect(nav.getByText("Dashboard")).toBeVisible();
     await expect(nav.getByText("Scans")).toBeVisible();
     await expect(nav.getByText("Assets")).toBeVisible();
+    await expect(nav.getByText("Compliance")).toBeVisible();
     await expect(nav.getByText("Reports")).toBeVisible();
     await expect(nav.getByText("SIEM")).toBeVisible();
     await expect(nav.getByText("Settings")).toBeVisible();
@@ -330,9 +333,9 @@ test.describe("Multi-Role: Cross-Role Verification", () => {
   test("capability counts are correct for all roles", async ({ page }) => {
     const expected = [
       { ...VIEWER, capCount: 4, role: "viewer" },
-      { ...ANALYST, capCount: 25, role: "security-analyst" },
-      { ...AUDITOR, capCount: 15, role: "auditor" },
-      { ...ADMIN, capCount: 42, role: "platform-admin" },
+      { ...ANALYST, capCount: 28, role: "security-analyst" },
+      { ...AUDITOR, capCount: 17, role: "auditor" },
+      { ...ADMIN, capCount: 46, role: "platform-admin" },
     ];
 
     for (const user of expected) {

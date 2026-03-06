@@ -84,19 +84,19 @@ test.describe.serial("Role Management", () => {
     const builtinRoles = roles.filter((r) => r.isBuiltin);
     expect(builtinRoles.length).toBe(7);
 
-    // Platform Administrator should have all capabilities (42)
+    // Platform Administrator should have all capabilities (46)
     const platformAdmin = builtinRoles.find(
       (r) => r.slug === "platform-admin"
     );
     expect(platformAdmin).toBeTruthy();
-    expect(platformAdmin!.capabilityCount).toBe(42);
+    expect(platformAdmin!.capabilityCount).toBe(46);
 
-    // Security Analyst should have 25 capabilities
+    // Security Analyst should have 28 capabilities
     const securityAnalyst = builtinRoles.find(
       (r) => r.slug === "security-analyst"
     );
     expect(securityAnalyst).toBeTruthy();
-    expect(securityAnalyst!.capabilityCount).toBe(25);
+    expect(securityAnalyst!.capabilityCount).toBe(28);
 
     // Viewer should have the fewest (4)
     const viewer = builtinRoles.find((r) => r.slug === "viewer");
@@ -141,7 +141,7 @@ test.describe.serial("Role Management", () => {
         if (cap.granted) grantedCaps.push(cap.id);
       }
     }
-    expect(grantedCaps.length).toBe(25);
+    expect(grantedCaps.length).toBe(28);
 
     // Create the custom role
     const createResponse = await apiCall(page, "POST", "/api/roles", {
@@ -159,7 +159,7 @@ test.describe.serial("Role Management", () => {
       capabilityCount: number;
     };
     expect(created.name).toBe(`E2E Test Role ${UNIQUE_SUFFIX}`);
-    expect(created.capabilityCount).toBe(25);
+    expect(created.capabilityCount).toBe(28);
     customRoleId = created.id;
   });
 
@@ -340,7 +340,7 @@ test.describe.serial("Role Management", () => {
       capabilityCount: number;
     };
     expect(updated.name).toBe(`E2E Test Role ${UNIQUE_SUFFIX} Updated`);
-    expect(updated.capabilityCount).toBe(26); // 25 + 1
+    expect(updated.capabilityCount).toBe(29); // 28 + 1
   });
 
   test("should delete custom role with no users assigned", async ({
@@ -482,8 +482,8 @@ test.describe.serial("Role Management", () => {
       grantedCount: number;
     };
 
-    // Should have 8 modules
-    expect(detail.modules.length).toBe(8);
+    // Should have 9 modules
+    expect(detail.modules.length).toBe(9);
 
     // Module names should match
     const moduleNames = detail.modules.map((m) => m.name);
@@ -491,6 +491,7 @@ test.describe.serial("Role Management", () => {
     expect(moduleNames).toContain("Scans");
     expect(moduleNames).toContain("Assets");
     expect(moduleNames).toContain("Risk Scoring");
+    expect(moduleNames).toContain("Compliance");
     expect(moduleNames).toContain("Reports");
     expect(moduleNames).toContain("AI Actions");
     expect(moduleNames).toContain("SIEM");
