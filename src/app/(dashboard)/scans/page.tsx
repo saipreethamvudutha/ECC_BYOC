@@ -66,8 +66,11 @@ export default function ScansPage() {
 
   function loadScans() {
     fetch("/api/scans")
-      .then((res) => res.json())
-      .then(setScans)
+      .then((res) => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then((data) => setScans(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }
@@ -106,16 +109,13 @@ export default function ScansPage() {
     }
   }
 
-  if (loading) {
-    return (
+  return (
+    <PageGate capability="scan.view" title="Scans">
+    {loading ? (
       <div className="flex items-center justify-center h-full">
         <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
       </div>
-    );
-  }
-
-  return (
-    <PageGate capability="scan.view" title="Scans">
+    ) : (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
@@ -279,6 +279,7 @@ export default function ScansPage() {
         </DialogContent>
       </Dialog>
     </div>
+    )}
     </PageGate>
   );
 }

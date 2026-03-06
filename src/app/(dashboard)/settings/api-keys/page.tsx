@@ -275,19 +275,16 @@ export default function ApiKeysPage() {
     setCreateError(null);
   };
 
-  if (loading) {
-    return (
+  return (
+    <PageGate capability="admin.apikey.manage" title="API Keys">
+    {loading ? (
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
           <p className="text-slate-400 text-sm">Loading API keys...</p>
         </div>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
+    ) : error ? (
       <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
@@ -306,11 +303,7 @@ export default function ApiKeysPage() {
           </Button>
         </div>
       </div>
-    );
-  }
-
-  return (
-    <PageGate capability="admin.apikey.manage" title="API Keys">
+    ) : (
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -880,6 +873,7 @@ export default function ApiKeysPage() {
         </DialogContent>
       </Dialog>
     </div>
+    )}
     </PageGate>
   );
 }

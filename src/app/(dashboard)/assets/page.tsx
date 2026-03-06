@@ -101,22 +101,14 @@ export default function AssetsPage() {
 
   useEffect(() => {
     fetch("/api/assets")
-      .then((res) => res.json())
-      .then(setAssets)
+      .then((res) => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then((data) => setAssets(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
-          <p className="text-slate-400 text-sm">Loading asset inventory...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Collect all unique tags from loaded assets
   const uniqueTags = Array.from(
@@ -151,6 +143,14 @@ export default function AssetsPage() {
 
   return (
     <PageGate capability="asset.view" title="Assets">
+    {loading ? (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm">Loading asset inventory...</p>
+        </div>
+      </div>
+    ) : (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -387,6 +387,7 @@ export default function AssetsPage() {
         </CardContent>
       </Card>
     </div>
+    )}
     </PageGate>
   );
 }
