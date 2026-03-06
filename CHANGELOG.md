@@ -4,6 +4,78 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [0.8.0] — 2026-03-06 — Phase 5B: Compliance Module — Enterprise Features
+
+### Added
+- **Assessment Dialog** — Full assessment workflow replacing inline dropdowns: status selection, findings/notes textarea, evidence references (add/remove list), remediation plan (conditional), due date input
+- **Evidence Capture** — Text-based evidence references stored as JSON arrays (e.g., "SOC2 Report Q3 2025", "Pen Test Jan 2026 — Section 4.2"); evidence count badges displayed on controls
+- **Assessment History Timeline** — Per-control expandable timeline showing all `ComplianceAssessment` records with assessor name, status badge, relative time, findings, evidence, remediation plans; vertical connector dots colored by status
+- **Export Compliance Reports** — CSV and JSON export with framework filtering; CSV columns: Framework, Version, ControlID, Title, Category, Status, LastAssessedAt, NextReviewAt, EvidenceCount, Notes; JSON includes full stats; audit-logged
+- **Framework Management UI** — Toggle `isActive` on frameworks via management dialog; deactivated frameworks hidden from main view but data preserved; supports description updates
+- **History API** (`GET /api/compliance/history?controlId=xxx`) — Returns all assessment records for a control, resolves assessor names, ordered by most recent
+- **Export API** (`GET /api/compliance/export?format=csv|json&framework=all|{id}`) — Server-side export with Content-Disposition attachment headers and date-stamped filenames
+- **Framework Management API** (`PATCH /api/compliance/frameworks/{id}`) — Toggle isActive, update description; tenant-scoped with audit logging
+- **14 new E2E tests** (`13-compliance-features.spec.ts`) covering all 4 features: dialog interaction, API validation, history timeline, export formats, framework toggle
+
+### Changed
+- **Compliance PATCH API** (`/api/compliance/update`) — Now persists `evidence` (validated string array), `remediationPlan`, `dueDate` in ComplianceAssessment; updates `ComplianceControl.nextReviewAt` from dueDate; enriched audit log with evidence count
+- **Compliance GET API** (`/api/compliance`) — Returns `evidence` (parsed JSON), `notes`, `assignedTo` per control; added `?includeInactive=true` query param for framework management
+- **Compliance page** (`compliance/page.tsx`) — Complete rewrite (686 lines): assessment dialog, expandable history rows, export UI with framework filter, framework management dialog; all features RBAC-gated (`compliance.assess`, `compliance.export`, `compliance.manage`)
+- **Existing E2E tests** (`10-features.spec.ts`) — Changed framework name assertions from `getByText` to `getByRole("heading")` to avoid matching hidden `<option>` elements in export dropdown
+
+### New Files (4)
+| File | Purpose |
+|------|---------|
+| `src/app/api/compliance/history/route.ts` | Assessment history API with assessor name resolution |
+| `src/app/api/compliance/export/route.ts` | CSV/JSON export with framework filter and audit logging |
+| `src/app/api/compliance/frameworks/[id]/route.ts` | Framework management API (toggle active, update description) |
+| `tests/e2e/13-compliance-features.spec.ts` | 14 E2E tests for all compliance enterprise features |
+
+### New API Endpoints
+| Method | Endpoint | Purpose | Capability |
+|--------|----------|---------|------------|
+| GET | `/api/compliance/history` | Assessment history for a control | `compliance.view` |
+| GET | `/api/compliance/export` | Export frameworks as CSV/JSON | `compliance.export` |
+| PATCH | `/api/compliance/frameworks/[id]` | Update framework settings | `compliance.manage` |
+
+### Build Metrics
+- Routes: 77 (total)
+- E2E tests: 152 → 166 (+14)
+- TypeScript errors: 0
+- Compliance capabilities: 4 (`compliance.view`, `compliance.assess`, `compliance.manage`, `compliance.export`)
+
+### Git Reference
+- Commit: `90db916`
+
+---
+
+## [0.7.0] — 2026-03-05 — Phase 5A: GRC Module — CIS v8.1 + NIST CSF 2.0 + Compliance RBAC
+
+### Added
+- **CIS Controls v8.1** framework — 18 controls across 6 categories (Asset Management, Data Protection, Account Management, Access Control, Vulnerability Management, Audit & Accountability)
+- **NIST CSF 2.0** framework — 12 controls across 5 categories (Identify, Protect, Detect, Respond, Recover)
+- **Dedicated compliance RBAC** — 4 capabilities: `compliance.view`, `compliance.assess`, `compliance.manage`, `compliance.export` with proper role assignments
+- **Compliance Center UI** — Framework cards with progress bars and donut charts, category grouping, status filters, control-level assessment with 5 status options
+- **Compliance API** (`/api/compliance`) — Multi-framework GET with stats computation; PATCH for status updates with full audit trail
+- **32 multi-role RBAC E2E tests** + PageGate rendering hardening
+- **Full RBAC frontend enforcement** — Sidebar gating + page-level access control
+
+### Changed
+- Total frameworks: 3 → 5 (added CIS v8.1, NIST CSF 2.0)
+- Total controls: 33 → 73 (+40)
+- Capabilities: 42 → 46 (+4 compliance-specific)
+- Seed data: 5 frameworks with 73 controls, proper tenant scoping
+
+### Build Metrics
+- Routes: 77
+- E2E tests: 120 → 152 (+32)
+- TypeScript errors: 0
+
+### Git Reference
+- Commit: `8078fdc`
+
+---
+
 ## [0.6.0] — 2026-03-03 — RBAC v2 Phase 4: Audit & Security
 
 ### Added
