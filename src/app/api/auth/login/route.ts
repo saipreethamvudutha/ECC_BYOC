@@ -74,6 +74,26 @@ export async function POST(request: NextRequest) {
 
     const isProduction = process.env.NODE_ENV === "production";
 
+    // Handle MFA-pending response
+    if (result.mfaRequired) {
+      const mfaResponse = NextResponse.json({
+        mfaRequired: true,
+        message: "MFA verification required",
+      });
+
+      // Set temporary MFA cookie (5 min, same as MFA pending token TTL)
+      mfaResponse.cookies.set("byoc_mfa", result.mfaPendingToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: "lax",
+        maxAge: 5 * 60,
+        path: "/",
+      });
+
+      return mfaResponse;
+    }
+
+    // Normal login (no MFA)
     const response = NextResponse.json({
       user: result.user,
       message: "Login successful",

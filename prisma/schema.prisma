@@ -38,6 +38,8 @@ model Tenant {
   scopes       Scope[]
   autoTagRules AutoTagRule[]
   sessions     Session[]
+  ssoProviders SSOProvider[]
+  scimTokens   SCIMToken[]
 
   @@map("tenants")
 }
@@ -54,6 +56,7 @@ model User {
   status         String    @default("active") // active, invited, suspended, deactivated
   mfaEnabled     Boolean   @default(false)
   mfaSecret      String?
+  mfaBackupCodes String?   // JSON: hashed backup codes
   lastLoginAt         DateTime?
   lastLoginIp         String?
   avatarUrl           String?
@@ -75,6 +78,8 @@ model User {
   createdScopes       Scope[]         @relation("ScopeCreator")
   createdAutoTagRules AutoTagRule[]   @relation("AutoTagRuleCreator")
   sessions            Session[]
+  createdSSOProviders SSOProvider[]   @relation("SSOProviderCreator")
+  createdSCIMTokens   SCIMToken[]    @relation("SCIMTokenCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -623,4 +628,57 @@ model Report {
 
   @@index([tenantId])
   @@map("reports")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ENTERPRISE SSO & SCIM (Phase 6)
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── SSO PROVIDERS (per-tenant OAuth configuration) ─────────────
+model SSOProvider {
+  id               String   @id @default(uuid())
+  tenantId         String
+  providerType     String   // google, azure_ad, okta
+  name             String   // Display name: "Google Workspace", "Okta SSO"
+  clientId         String   // Encrypted at rest (AES-256-GCM)
+  clientSecret     String   // Encrypted at rest (AES-256-GCM)
+  issuerUrl        String?  // OIDC issuer (e.g., https://accounts.google.com)
+  authorizationUrl String?  // Override for non-standard providers
+  tokenUrl         String?  // Override for non-standard providers
+  userinfoUrl      String?  // Override for non-standard providers
+  domains          String   @default("[]") // JSON: ["exargen.com"] — allowed email domains
+  defaultRoleId    String?  // Auto-assign this role on JIT provisioning
+  scopes           String   @default("openid profile email")
+  isEnabled        Boolean  @default(false)
+  autoProvision    Boolean  @default(true) // JIT user creation on first SSO login
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("SSOProviderCreator", fields: [createdById], references: [id])
+
+  @@unique([tenantId, providerType])
+  @@index([tenantId, isEnabled])
+  @@map("sso_providers")
+}
+
+// ─── SCIM TOKENS (bearer tokens for SCIM API auth) ─────────────
+model SCIMToken {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String    // "Okta SCIM Token", "Azure AD Sync"
+  tokenHash   String    @unique  // bcrypt hash
+  tokenPrefix String    // First 8 chars for display: "scim_abc1..."
+  createdById String
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User   @relation("SCIMTokenCreator", fields: [createdById], references: [id])
+
+  @@index([tenantId, isActive])
+  @@map("scim_tokens")
 }

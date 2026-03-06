@@ -84,12 +84,12 @@ test.describe.serial("Role Management", () => {
     const builtinRoles = roles.filter((r) => r.isBuiltin);
     expect(builtinRoles.length).toBe(7);
 
-    // Platform Administrator should have all capabilities (46)
+    // Platform Administrator should have all capabilities (50)
     const platformAdmin = builtinRoles.find(
       (r) => r.slug === "platform-admin"
     );
     expect(platformAdmin).toBeTruthy();
-    expect(platformAdmin!.capabilityCount).toBe(46);
+    expect(platformAdmin!.capabilityCount).toBe(50);
 
     // Security Analyst should have 28 capabilities
     const securityAnalyst = builtinRoles.find(

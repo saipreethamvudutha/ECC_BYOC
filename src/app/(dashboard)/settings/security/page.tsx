@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -72,6 +73,205 @@ const resultBadgeVariants: Record<string, "success" | "destructive" | "warning" 
   denied: "destructive",
   error: "warning",
 };
+
+function MFASection() {
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(true);
+  const [setupStep, setSetupStep] = useState<"idle" | "qr" | "verify" | "backup" | "disable">("idle");
+  const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [manualKey, setManualKey] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [mfaError, setMfaError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me/capabilities")
+      .then(r => r.json())
+      .then(() => {
+        // Check MFA status from user profile
+        fetch("/api/auth/me")
+          .then(r => r.json())
+          .then(data => {
+            setMfaEnabled(data.user?.mfaEnabled || false);
+          })
+          .catch(() => {})
+          .finally(() => setMfaLoading(false));
+      })
+      .catch(() => setMfaLoading(false));
+  }, []);
+
+  async function startSetup() {
+    setMfaError("");
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/auth/mfa/setup", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setQrCodeUrl(data.qrCodeDataUrl);
+        setManualKey(data.manualEntryKey);
+        setSetupStep("qr");
+      } else {
+        setMfaError(data.error || "Failed to start MFA setup");
+      }
+    } catch {
+      setMfaError("Connection error");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function confirmSetup() {
+    setMfaError("");
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/auth/mfa/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: verifyCode }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBackupCodes(data.backupCodes);
+        setMfaEnabled(true);
+        setSetupStep("backup");
+      } else {
+        setMfaError(data.error || "Invalid code");
+      }
+    } catch {
+      setMfaError("Connection error");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDisable() {
+    setMfaError("");
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/auth/mfa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: disableCode }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMfaEnabled(false);
+        setSetupStep("idle");
+        setDisableCode("");
+      } else {
+        setMfaError(data.error || "Invalid code");
+      }
+    } catch {
+      setMfaError("Connection error");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  if (mfaLoading) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", mfaEnabled ? "bg-emerald-500/10" : "bg-yellow-500/10")}>
+              <ShieldCheck className={cn("w-5 h-5", mfaEnabled ? "text-emerald-400" : "text-yellow-400")} />
+            </div>
+            <div>
+              <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {mfaEnabled ? "MFA is enabled — your account is protected" : "Add an extra layer of security to your account"}
+              </p>
+            </div>
+          </div>
+          <Badge variant={mfaEnabled ? "success" : "warning"}>
+            {mfaEnabled ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {setupStep === "idle" && !mfaEnabled && (
+          <Button onClick={startSetup} disabled={actionLoading}>
+            {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldCheck className="w-4 h-4 mr-1" />}
+            Enable MFA
+          </Button>
+        )}
+
+        {setupStep === "idle" && mfaEnabled && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">Your account is protected with TOTP-based two-factor authentication.</p>
+            <Button variant="outline" onClick={() => setSetupStep("disable")} className="text-red-400 hover:text-red-300">
+              Disable MFA
+            </Button>
+          </div>
+        )}
+
+        {setupStep === "qr" && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+            {qrCodeUrl && (
+              <div className="flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrCodeUrl} alt="MFA QR Code" className="w-48 h-48 rounded-lg" />
+              </div>
+            )}
+            <div className="text-center">
+              <p className="text-xs text-slate-500 mb-1">Or enter this key manually:</p>
+              <code className="text-sm text-cyan-400 bg-slate-800 px-3 py-1 rounded">{manualKey}</code>
+            </div>
+            <div>
+              <label className="text-sm text-slate-400">Enter the 6-digit code from your app:</label>
+              <Input value={verifyCode} onChange={e => setVerifyCode(e.target.value)} placeholder="000000" maxLength={6} className="mt-1 text-center text-lg tracking-widest" />
+            </div>
+            {mfaError && <p className="text-sm text-red-400">{mfaError}</p>}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setSetupStep("idle"); setVerifyCode(""); setMfaError(""); }}>Cancel</Button>
+              <Button onClick={confirmSetup} disabled={actionLoading || verifyCode.length !== 6}>
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Verify & Enable
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {setupStep === "backup" && (
+          <div className="space-y-4">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+              <p className="text-sm text-amber-400 font-medium mb-2">Save these backup codes</p>
+              <p className="text-xs text-slate-400 mb-3">These codes can be used if you lose access to your authenticator app. Each code can only be used once.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {backupCodes.map((code, i) => (
+                  <code key={i} className="text-sm text-white bg-slate-800 px-3 py-1.5 rounded text-center font-mono">{code}</code>
+                ))}
+              </div>
+            </div>
+            <Button onClick={() => { setSetupStep("idle"); setBackupCodes([]); setVerifyCode(""); }}>
+              I&apos;ve saved my backup codes
+            </Button>
+          </div>
+        )}
+
+        {setupStep === "disable" && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400">Enter your current TOTP code to disable MFA:</p>
+            <Input value={disableCode} onChange={e => setDisableCode(e.target.value)} placeholder="000000" maxLength={6} className="text-center text-lg tracking-widest" />
+            {mfaError && <p className="text-sm text-red-400">{mfaError}</p>}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setSetupStep("idle"); setDisableCode(""); setMfaError(""); }}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDisable} disabled={actionLoading || disableCode.length !== 6}>
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Disable MFA
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SecurityDashboardPage() {
   const router = useRouter();
@@ -419,6 +619,9 @@ export default function SecurityDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* MFA Section */}
+      <MFASection />
 
       {/* Stat Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

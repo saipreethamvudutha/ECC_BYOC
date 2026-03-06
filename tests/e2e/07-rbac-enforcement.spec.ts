@@ -71,8 +71,8 @@ test.describe("RBAC Enforcement - Authenticated Admin", () => {
       globalScope: boolean;
     };
 
-    // Platform Admin should have all 46 capabilities
-    expect(capData.capabilities.length).toBe(46);
+    // Platform Admin should have all 50 capabilities
+    expect(capData.capabilities.length).toBe(50);
 
     // No capabilities should be denied for Platform Admin
     expect(capData.denied.length).toBe(0);
@@ -377,8 +377,8 @@ test.describe("RBAC Enforcement - Deny-Wins and Role-Specific", () => {
     }
 
     // Additionally, verify that org-admin has all other capabilities except billing
-    // Org-admin should have 45 capabilities (46 total - 1 denied)
-    expect(permData.totalCapabilities).toBe(45);
+    // Org-admin should have 49 capabilities (50 total - 1 denied)
+    expect(permData.totalCapabilities).toBe(49);
   });
 
   test("should verify org-admin role detail shows denied billing capability", async ({
@@ -455,8 +455,8 @@ test.describe("RBAC Enforcement - Deny-Wins and Role-Specific", () => {
 
     // Platform admin should have zero denied capabilities
     expect(capData.denied.length).toBe(0);
-    // And all 46 granted
-    expect(capData.capabilities.length).toBe(46);
+    // And all 50 granted
+    expect(capData.capabilities.length).toBe(50);
   });
 
   test("should verify deny-wins: if both granted and denied, denied takes precedence", async ({
@@ -479,13 +479,13 @@ test.describe("RBAC Enforcement - Deny-Wins and Role-Specific", () => {
     const orgAdmin = roles.find((r) => r.slug === "org-admin");
     expect(orgAdmin).toBeTruthy();
 
-    // Org-admin should have 45 granted capabilities (all except billing)
-    expect(orgAdmin!.capabilityCount).toBe(45);
+    // Org-admin should have 49 granted capabilities (all except billing)
+    expect(orgAdmin!.capabilityCount).toBe(49);
 
-    // Platform admin should have all 46
+    // Platform admin should have all 50
     const platformAdmin = roles.find((r) => r.slug === "platform-admin");
     expect(platformAdmin).toBeTruthy();
-    expect(platformAdmin!.capabilityCount).toBe(46);
+    expect(platformAdmin!.capabilityCount).toBe(50);
 
     // The difference (1) is the billing capability denied by org-admin
     expect(platformAdmin!.capabilityCount - orgAdmin!.capabilityCount).toBe(1);
@@ -649,12 +649,12 @@ test.describe("RBAC Enforcement - Role Capability Counts", () => {
       isBuiltin: boolean;
     }>;
 
-    // Expected capability counts per the BUILTIN_ROLES definition (46 total capabilities)
+    // Expected capability counts per the BUILTIN_ROLES definition (50 total capabilities)
     const expectedCounts: Record<string, number> = {
-      "platform-admin": 46, // All capabilities
-      "org-admin": 45, // All minus billing
+      "platform-admin": 50, // All capabilities
+      "org-admin": 49, // All minus billing
       "security-analyst": 28, // SOC operator set + compliance
-      "auditor": 17, // Read-only set + compliance
+      "auditor": 19, // Read-only set + compliance + SSO/SCIM view
       "viewer": 4, // Dashboard + risk + reports
       "remediation-user": 6, // View results + compliance.view
       "api-service": 8, // Machine-to-machine subset

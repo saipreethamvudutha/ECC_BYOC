@@ -72,7 +72,7 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "siem.rule.manage", module: "siem", name: "Manage SIEM Rules", description: "Create, edit, delete correlation and alerting rules", riskLevel: "high" },
   { id: "siem.integration.manage", module: "siem", name: "Manage SIEM Integrations", description: "Configure log sources, forwarding, and external SIEM connectors", riskLevel: "high" },
 
-  // ── Administration (9) ──
+  // ── Administration (13) ──
   { id: "admin.user.view", module: "admin", name: "View Users", description: "See user list and profiles", riskLevel: "low" },
   { id: "admin.user.manage", module: "admin", name: "Manage Users", description: "Invite, suspend, reactivate, delete users", riskLevel: "high" },
   { id: "admin.role.view", module: "admin", name: "View Roles", description: "See role definitions and assignments", riskLevel: "low" },
@@ -82,6 +82,10 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "admin.billing.manage", module: "admin", name: "Manage Billing", description: "View/edit subscription, billing, invoices", riskLevel: "critical" },
   { id: "admin.audit.view", module: "admin", name: "View Audit Log", description: "Access full audit trail", riskLevel: "low" },
   { id: "admin.audit.export", module: "admin", name: "Export Audit Log", description: "Download audit logs", riskLevel: "medium" },
+  { id: "admin.sso.view", module: "admin", name: "View SSO Configuration", description: "See configured SSO providers and SCIM status", riskLevel: "low" },
+  { id: "admin.sso.manage", module: "admin", name: "Manage SSO", description: "Configure SSO providers, enable/disable, manage secrets", riskLevel: "critical" },
+  { id: "admin.scim.view", module: "admin", name: "View SCIM Configuration", description: "See SCIM tokens and sync status", riskLevel: "low" },
+  { id: "admin.scim.manage", module: "admin", name: "Manage SCIM", description: "Create/revoke SCIM tokens, configure provisioning", riskLevel: "high" },
 ];
 
 // ─── Built-in Role Definitions ───────────────────────────────────
@@ -150,6 +154,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "siem.view",
       "admin.audit.view", "admin.audit.export",
       "admin.user.view", "admin.role.view",
+      "admin.sso.view", "admin.scim.view",
     ],
   },
   {

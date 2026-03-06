@@ -13,8 +13,8 @@ import {
  * Tests RBAC enforcement across all 4 demo user roles:
  *   - Viewer:   4 capabilities (dash.view, risk.view, report.view, report.export)
  *   - Analyst:  28 capabilities (operational SOC role)
- *   - Auditor:  17 capabilities (read-only compliance)
- *   - Admin:    46 capabilities (full access)
+ *   - Auditor:  19 capabilities (read-only compliance + SSO/SCIM view)
+ *   - Admin:    50 capabilities (full access)
  *
  * Validates:
  *   - Sidebar shows correct nav items per role
@@ -32,8 +32,8 @@ const ADMIN = { email: "admin@exargen.com", password: "Admin123!", name: "Exarge
 // ─── Expected Capabilities Per Role ────────────────────────────────
 const VIEWER_CAPS = ["dash.view", "risk.view", "report.view", "report.export"];
 const ANALYST_CAP_COUNT = 28;
-const AUDITOR_CAP_COUNT = 17;
-const ADMIN_CAP_COUNT = 46;
+const AUDITOR_CAP_COUNT = 19;
+const ADMIN_CAP_COUNT = 50;
 
 // ═══════════════════════════════════════════════════════════════════
 // VIEWER TESTS — Most restricted (executives/stakeholders)
@@ -217,12 +217,12 @@ test.describe("Multi-Role: Analyst (28 capabilities)", () => {
 // ═══════════════════════════════════════════════════════════════════
 // AUDITOR TESTS — Read-only compliance role (17 capabilities)
 // ═══════════════════════════════════════════════════════════════════
-test.describe("Multi-Role: Auditor (17 capabilities)", () => {
+test.describe("Multi-Role: Auditor (19 capabilities)", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, AUDITOR.email, AUDITOR.password);
   });
 
-  test("auditor should have 17 capabilities with global scope", async ({ page }) => {
+  test("auditor should have 19 capabilities with global scope", async ({ page }) => {
     const result = await apiCall(page, "GET", "/api/auth/me/capabilities");
     expect(result.status).toBe(200);
     const data = result.data as { capabilities: string[]; roles: string[]; globalScope: boolean };
@@ -334,8 +334,8 @@ test.describe("Multi-Role: Cross-Role Verification", () => {
     const expected = [
       { ...VIEWER, capCount: 4, role: "viewer" },
       { ...ANALYST, capCount: 28, role: "security-analyst" },
-      { ...AUDITOR, capCount: 17, role: "auditor" },
-      { ...ADMIN, capCount: 46, role: "platform-admin" },
+      { ...AUDITOR, capCount: 19, role: "auditor" },
+      { ...ADMIN, capCount: 50, role: "platform-admin" },
     ];
 
     for (const user of expected) {

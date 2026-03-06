@@ -4,6 +4,90 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [0.9.0] — 2026-03-06 — Phase 6: Enterprise SSO, MFA & SCIM 2.0
+
+### Added
+- **Multi-Factor Authentication (TOTP)** — Full MFA lifecycle: setup with QR code, confirm with first code, 10 single-use backup codes, login verification, disable with code proof. Uses `otpauth` + `qrcode` libraries, RFC 6238 compliant.
+- **Single Sign-On (OAuth 2.0 OIDC)** — OAuth flow with PKCE for Google, Azure AD (Entra ID), and Okta. JIT user provisioning, account linking by email, domain-scoped providers. Dynamic SSO buttons on login page.
+- **SCIM 2.0 Provisioning** — Full SCIM 2.0 server: Users (CRUD + filter + pagination), Groups (role mapping), ServiceProviderConfig, Schemas, ResourceTypes. Bearer token auth with bcrypt hashing.
+- **Encryption Library** (`src/lib/encryption.ts`) — AES-256-GCM encrypt/decrypt with PBKDF2 key derivation from AUTH_SECRET. Used for MFA secrets and SSO client secrets at rest.
+- **TOTP Library** (`src/lib/totp.ts`) — TOTP secret generation, QR code rendering, code verification with ±1 window tolerance, backup code generation and hashing.
+- **OAuth Library** (`src/lib/oauth.ts`) — PKCE (S256) generation, authorization URL builders for 3 providers, code-for-token exchange, userinfo fetch, state management.
+- **SCIM Library** (`src/lib/scim.ts`) — SCIM-to-User schema mapping, filter parsing (`userName eq "x"`), ListResponse/ErrorResponse builders, SCIM token authentication.
+- **Identity Settings Page** (`/settings/identity`) — SSO provider management (add/edit/delete providers, test connection) and SCIM token management (create/revoke tokens, copy base URL). Gated by `admin.sso.manage` and `admin.scim.manage`.
+- **4 new RBAC capabilities**: `admin.sso.view`, `admin.sso.manage`, `admin.scim.view`, `admin.scim.manage` (50 total)
+- **2 new Prisma models**: `SSOProvider` (OAuth provider config per tenant) and `SCIMToken` (SCIM bearer tokens per tenant)
+- **25 new E2E tests** (`14-sso-mfa-scim.spec.ts`) covering MFA, SSO, SCIM, capabilities, and navigation
+
+### Changed
+- **Login page** (`login/page.tsx`) — Added SSO provider buttons (dynamically loaded), MFA verification form with backup code toggle, Suspense boundary for `useSearchParams()`
+- **Login API** (`/api/auth/login`) — Returns `mfaRequired: true` + `mfaPendingToken` cookie when MFA enabled, instead of immediate session creation
+- **Auth library** (`auth.ts`) — `authenticateUser()` now returns MFA-pending state for MFA-enabled users
+- **Security settings** (`security/page.tsx`) — Added MFA section: enable/disable MFA with QR code setup flow, backup codes display, status indicator
+- **Settings layout** — Added "Identity" tab with Globe icon for SSO + SCIM management
+- **Middleware** — Added SSO/MFA/SCIM paths to `publicPaths` and `csrfExemptPaths`
+- **`/api/auth/me`** — Now returns `mfaEnabled` field from database for frontend MFA status checks
+- **Capability counts updated**: Platform Admin 46→50, Org Admin 45→49, Auditor 17→19
+- **Existing E2E tests** — Updated hardcoded capability counts in `05-roles`, `07-rbac-enforcement`, `12-multi-role-access`
+
+### New Files (23)
+| File | Purpose |
+|------|---------|
+| `src/lib/encryption.ts` | AES-256-GCM encrypt/decrypt using AUTH_SECRET |
+| `src/lib/totp.ts` | TOTP secret generation, verification, QR codes, backup codes |
+| `src/lib/oauth.ts` | OAuth PKCE flow, provider URL builders, token exchange |
+| `src/lib/scim.ts` | SCIM user/group schema mapping, filter parsing, response builders |
+| `src/app/api/auth/mfa/setup/route.ts` | MFA enrollment initiation |
+| `src/app/api/auth/mfa/confirm/route.ts` | MFA enrollment confirmation |
+| `src/app/api/auth/mfa/verify/route.ts` | MFA verification during login |
+| `src/app/api/auth/mfa/disable/route.ts` | MFA disable |
+| `src/app/api/auth/sso/authorize/route.ts` | OAuth authorization redirect |
+| `src/app/api/auth/sso/callback/route.ts` | OAuth callback handler |
+| `src/app/api/auth/sso/providers/route.ts` | Public: list enabled SSO providers |
+| `src/app/api/sso/providers/route.ts` | Admin: SSO provider CRUD (GET, POST) |
+| `src/app/api/sso/providers/[id]/route.ts` | Admin: SSO provider (PATCH, DELETE) |
+| `src/app/api/scim/v2/Users/route.ts` | SCIM user list + create |
+| `src/app/api/scim/v2/Users/[id]/route.ts` | SCIM user get + update + delete |
+| `src/app/api/scim/v2/Groups/route.ts` | SCIM group list |
+| `src/app/api/scim/v2/Groups/[id]/route.ts` | SCIM group get + member management |
+| `src/app/api/scim/v2/ServiceProviderConfig/route.ts` | SCIM discovery |
+| `src/app/api/scim/v2/Schemas/route.ts` | SCIM schema advertisement |
+| `src/app/api/scim/tokens/route.ts` | SCIM token CRUD (GET, POST) |
+| `src/app/api/scim/tokens/[id]/route.ts` | SCIM token revoke (DELETE) |
+| `src/app/(dashboard)/settings/identity/page.tsx` | SSO + SCIM settings page |
+| `tests/e2e/14-sso-mfa-scim.spec.ts` | 25 E2E tests for Phase 6 |
+
+### New API Endpoints (10 route files, ~20 HTTP methods)
+| Method | Endpoint | Purpose | Auth |
+|--------|----------|---------|------|
+| POST | `/api/auth/mfa/setup` | MFA enrollment initiation | Session |
+| POST | `/api/auth/mfa/confirm` | MFA enrollment confirmation | Session |
+| POST | `/api/auth/mfa/verify` | MFA verification during login | MFA cookie |
+| POST | `/api/auth/mfa/disable` | MFA disable | Session + TOTP |
+| GET | `/api/auth/sso/authorize` | OAuth authorization redirect | Public |
+| GET | `/api/auth/sso/callback` | OAuth callback handler | Public |
+| GET | `/api/auth/sso/providers` | List enabled SSO providers | Public |
+| GET/POST | `/api/sso/providers` | Admin SSO provider management | `admin.sso.manage` |
+| PATCH/DELETE | `/api/sso/providers/[id]` | Admin SSO provider update/delete | `admin.sso.manage` |
+| GET/POST | `/api/scim/tokens` | SCIM token management | `admin.scim.manage` |
+| DELETE | `/api/scim/tokens/[id]` | Revoke SCIM token | `admin.scim.manage` |
+| GET/POST | `/api/scim/v2/Users` | SCIM user provisioning | Bearer token |
+| GET/PATCH/DELETE | `/api/scim/v2/Users/[id]` | SCIM user management | Bearer token |
+| GET | `/api/scim/v2/Groups` | SCIM group list | Bearer token |
+| GET/PATCH | `/api/scim/v2/Groups/[id]` | SCIM group management | Bearer token |
+| GET | `/api/scim/v2/ServiceProviderConfig` | SCIM discovery | Bearer token |
+| GET | `/api/scim/v2/Schemas` | SCIM schema advertisement | Bearer token |
+
+### Build Metrics
+- Routes: 77 → 87 (+10)
+- E2E tests: 166 → 191 (+25)
+- TypeScript errors: 0
+- Capabilities: 46 → 50 (+4)
+- Prisma models: 20 → 22 (+2)
+- NPM packages added: `otpauth`, `qrcode`, `@types/qrcode`
+
+---
+
 ## [0.8.0] — 2026-03-06 — Phase 5B: Compliance Module — Enterprise Features
 
 ### Added

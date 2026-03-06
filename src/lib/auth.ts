@@ -38,17 +38,31 @@ export interface JWTPayload {
   userId: string;
   tenantId: string;
   email: string;
-  type: "access" | "refresh";
+  type: "access" | "refresh" | "mfa_pending";
+}
+
+export interface AuthResult {
+  user: SessionUser;
+  accessToken: string;
+  refreshToken: string;
+  mfaRequired?: false;
+}
+
+export interface MFAPendingResult {
+  mfaRequired: true;
+  mfaPendingToken: string;
+  userId: string;
 }
 
 /**
  * Authenticate a user with email + password.
+ * Returns MFAPendingResult if MFA is enabled (caller must handle MFA verification).
  */
 export async function authenticateUser(
   email: string,
   password: string,
   request?: Request | null
-): Promise<{ user: SessionUser; accessToken: string; refreshToken: string } | null> {
+): Promise<AuthResult | MFAPendingResult | null> {
   const user = await prisma.user.findFirst({
     where: { email, status: "active" },
     include: {
@@ -97,6 +111,27 @@ export async function authenticateUser(
   // Clear failed login attempts on success
   await resetFailedLoginAttempts(user.id);
 
+  // Check if MFA is enabled — if so, return a pending token instead of full auth
+  if (user.mfaEnabled && user.mfaSecret) {
+    await createAuditLog({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      actorType: "user",
+      action: "user.login_mfa_pending",
+      result: "success",
+      details: { step: "password_verified", mfaRequired: true },
+      request,
+    });
+
+    const MFA_PENDING_TTL = 5 * 60; // 5 minutes to complete MFA
+    const mfaPendingToken = generateToken(
+      { userId: user.id, tenantId: user.tenantId, email: user.email, type: "mfa_pending" },
+      MFA_PENDING_TTL
+    );
+
+    return { mfaRequired: true, mfaPendingToken, userId: user.id };
+  }
+
   // Update last login
   await prisma.user.update({
     where: { id: user.id },
@@ -133,7 +168,62 @@ export async function authenticateUser(
   // Create database session for refresh token tracking
   await createDbSession(user.id, user.tenantId, refreshToken, request);
 
-  return { user: sessionUser, accessToken, refreshToken };
+  return { user: sessionUser, accessToken, refreshToken, mfaRequired: false };
+}
+
+/**
+ * Complete login after MFA verification — issue tokens and create session.
+ */
+export async function completeLoginAfterMFA(
+  userId: string,
+  request?: Request | null
+): Promise<AuthResult | null> {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, status: "active" },
+    include: {
+      tenant: true,
+      userRoles: { include: { role: true } },
+    },
+  });
+
+  if (!user) return null;
+
+  // Update last login
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
+
+  // Log successful MFA login
+  await createAuditLog({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    actorType: "user",
+    action: "user.login",
+    result: "success",
+    details: { method: "mfa" },
+    request,
+  });
+
+  cleanupExpiredSessions().catch(console.error);
+
+  const sessionUser: SessionUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    tenantId: user.tenantId,
+    tenantName: user.tenant.name,
+    tenantPlan: user.tenant.plan,
+    roles: user.userRoles.map((ur) => ur.role.slug),
+    avatarUrl: user.avatarUrl,
+  };
+
+  const accessToken = generateToken({ userId: user.id, tenantId: user.tenantId, email: user.email, type: "access" }, ACCESS_TOKEN_TTL);
+  const refreshToken = generateToken({ userId: user.id, tenantId: user.tenantId, email: user.email, type: "refresh" }, REFRESH_TOKEN_TTL);
+
+  await createDbSession(user.id, user.tenantId, refreshToken, request);
+
+  return { user: sessionUser, accessToken, refreshToken, mfaRequired: false };
 }
 
 export function generateToken(payload: JWTPayload, expiresIn: number): string {

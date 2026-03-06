@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const publicPaths = ["/login", "/register", "/accept-invitation", "/api/auth/login", "/api/auth/accept-invitation"];
+const publicPaths = [
+  "/login",
+  "/register",
+  "/accept-invitation",
+  "/api/auth/login",
+  "/api/auth/accept-invitation",
+  "/api/auth/sso/authorize",
+  "/api/auth/sso/callback",
+  "/api/auth/sso/providers",
+  "/api/auth/mfa/verify",
+  "/api/scim",
+];
 
-// M12: Paths exempt from CSRF check (form-based or public endpoints)
-const csrfExemptPaths = ["/api/auth/login", "/api/auth/accept-invitation", "/api/health"];
+// M12: Paths exempt from CSRF check (form-based, public, or external endpoints)
+const csrfExemptPaths = [
+  "/api/auth/login",
+  "/api/auth/accept-invitation",
+  "/api/auth/sso/callback",
+  "/api/auth/mfa/verify",
+  "/api/scim",
+  "/api/health",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
