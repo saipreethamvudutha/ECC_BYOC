@@ -968,13 +968,228 @@ async function main() {
   }
   console.log(`   ✅ ${demoUsers.length} demo users created\n`);
 
+  // ─── 17. Seed Scans & Findings (Phase 7) ───────────────────────
+  console.log("🔍 Seeding scans and findings...");
+
+  // Clean old scan data for re-seed
+  await prisma.scanResult.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.scan.deleteMany({ where: { tenantId: tenant.id } });
+
+  // Find some assets to link findings to
+  const prodWebAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-web-prod-01" } });
+  const prodApiAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-api-prod-01" } });
+  const prodDbAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-db-prod-01" } });
+  const stagingAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-web-staging-01" } });
+
+  const scan1 = await prisma.scan.create({
+    data: {
+      id: uuid(), tenantId: tenant.id, name: "Infrastructure Vulnerability Scan",
+      type: "vulnerability", status: "completed",
+      targets: JSON.stringify(["10.0.1.10", "10.0.2.10", "10.0.3.10"]),
+      progress: JSON.stringify({ completedChecks: ["http-headers", "ssl-tls", "exposed-panels", "info-disclosure", "common-cves", "cloud-misconfig"], currentBatch: 3, totalBatches: 3, totalFindings: 12, checkResults: { "http-headers": 4, "ssl-tls": 2, "exposed-panels": 1, "info-disclosure": 2, "common-cves": 2, "cloud-misconfig": 1 } }),
+      startedAt: new Date(Date.now() - 2 * DAY), completedAt: new Date(Date.now() - 2 * DAY + 45000),
+      createdById: superAdmin.id,
+    },
+  });
+
+  const scan2 = await prisma.scan.create({
+    data: {
+      id: uuid(), tenantId: tenant.id, name: "Network Port Assessment",
+      type: "port", status: "completed",
+      targets: JSON.stringify(["10.0.1.10", "10.0.1.11", "10.0.0.1"]),
+      progress: JSON.stringify({ completedChecks: ["port-scan", "http-headers"], currentBatch: 1, totalBatches: 1, totalFindings: 8, checkResults: { "port-scan": 6, "http-headers": 2 } }),
+      startedAt: new Date(Date.now() - 1 * DAY), completedAt: new Date(Date.now() - 1 * DAY + 30000),
+      createdById: superAdmin.id,
+    },
+  });
+
+  const scan3 = await prisma.scan.create({
+    data: {
+      id: uuid(), tenantId: tenant.id, name: "Cloud Configuration Audit",
+      type: "compliance", status: "completed",
+      targets: JSON.stringify(["10.1.1.10", "10.3.1.10"]),
+      progress: JSON.stringify({ completedChecks: ["http-headers", "ssl-tls", "dns-checks", "info-disclosure"], currentBatch: 2, totalBatches: 2, totalFindings: 10, checkResults: { "http-headers": 3, "ssl-tls": 2, "dns-checks": 3, "info-disclosure": 2 } }),
+      startedAt: new Date(Date.now() - 12 * HOUR), completedAt: new Date(Date.now() - 12 * HOUR + 35000),
+      createdById: superAdmin.id,
+    },
+  });
+
+  // Update asset lastScanAt
+  if (prodWebAsset) await prisma.asset.update({ where: { id: prodWebAsset.id }, data: { lastScanAt: new Date(Date.now() - 2 * DAY) } });
+  if (prodApiAsset) await prisma.asset.update({ where: { id: prodApiAsset.id }, data: { lastScanAt: new Date(Date.now() - 2 * DAY) } });
+  if (prodDbAsset) await prisma.asset.update({ where: { id: prodDbAsset.id }, data: { lastScanAt: new Date(Date.now() - 2 * DAY) } });
+  if (stagingAsset) await prisma.asset.update({ where: { id: stagingAsset.id }, data: { lastScanAt: new Date(Date.now() - 12 * HOUR) } });
+
+  // Scan 1 findings (12)
+  const scan1Findings = [
+    { severity: "critical", title: "Potential Log4Shell (Log4j RCE) Vulnerability", cveId: "CVE-2021-44228", cvssScore: 10.0, description: "The server may be vulnerable to Log4Shell, a critical RCE in Apache Log4j 2.x.", remediation: "Update Log4j to version 2.17.1 or later.", assetId: prodApiAsset?.id, details: { checkModule: "common-cves", target: "10.0.2.10" } },
+    { severity: "critical", title: "Environment File (.env) Accessible", cveId: "CWE-200", cvssScore: 9.8, description: "The .env file is publicly accessible, exposing database credentials and API keys.", remediation: "Block access to .env files. Rotate all exposed credentials immediately.", assetId: prodWebAsset?.id, details: { checkModule: "info-disclosure", path: "/.env", target: "10.0.1.10" } },
+    { severity: "high", title: "SSL/TLS Certificate Expiring Within 30 Days", cvssScore: 7.4, description: "The SSL/TLS certificate will expire in 18 days.", remediation: "Renew the SSL/TLS certificate before expiration.", assetId: prodWebAsset?.id, details: { checkModule: "ssl-tls", daysUntilExpiry: 18, target: "10.0.1.10" } },
+    { severity: "high", title: "Database Port Exposed to Network", cvssScore: 8.1, description: "PostgreSQL port 5432 is directly accessible from untrusted networks.", remediation: "Restrict database access to application servers only via firewall rules.", assetId: prodDbAsset?.id, details: { checkModule: "port-scan", port: 5432, service: "PostgreSQL", target: "10.0.3.10" } },
+    { severity: "high", title: "Administrative Panel Exposed (/admin)", cvssScore: 7.5, description: "An administrative interface is publicly accessible.", remediation: "Restrict admin panel access to internal networks or VPN.", assetId: prodWebAsset?.id, details: { checkModule: "exposed-panels", path: "/admin", target: "10.0.1.10" } },
+    { severity: "medium", title: "Missing Content-Security-Policy Header", cvssScore: 5.4, description: "CSP header not set, leaving the application vulnerable to XSS and code injection.", remediation: "Add a Content-Security-Policy header with a restrictive policy.", assetId: prodWebAsset?.id, details: { checkModule: "http-headers", target: "10.0.1.10" } },
+    { severity: "medium", title: "Missing Strict-Transport-Security Header", cveId: "CWE-319", cvssScore: 5.9, description: "HSTS header not set, users vulnerable to SSL stripping attacks.", remediation: "Add Strict-Transport-Security: max-age=31536000; includeSubDomains; preload", assetId: prodApiAsset?.id, details: { checkModule: "http-headers", target: "10.0.2.10" } },
+    { severity: "medium", title: "Detailed Error Messages Exposed", cveId: "CWE-209", cvssScore: 5.3, description: "The application returns stack traces to end users.", remediation: "Display generic error pages in production. Set DEBUG=false.", assetId: prodApiAsset?.id, details: { checkModule: "info-disclosure", target: "10.0.2.10" } },
+    { severity: "medium", title: "Missing X-Frame-Options Header", cvssScore: 4.3, description: "Site vulnerable to clickjacking attacks.", remediation: "Add X-Frame-Options: DENY or SAMEORIGIN", assetId: prodWebAsset?.id, details: { checkModule: "http-headers", target: "10.0.1.10" } },
+    { severity: "low", title: "Server Version Information Disclosed", cvssScore: 3.7, description: "The Server header reveals specific software version information.", remediation: "Configure the web server to suppress the Server header.", assetId: prodWebAsset?.id, details: { checkModule: "http-headers", serverHeader: "nginx/1.24.0", target: "10.0.1.10" } },
+    { severity: "low", title: "Missing Referrer-Policy Header", cvssScore: 3.1, description: "Referrer information may leak sensitive URL data to third-party sites.", remediation: "Add Referrer-Policy: strict-origin-when-cross-origin", assetId: prodApiAsset?.id, details: { checkModule: "http-headers", target: "10.0.2.10" } },
+    { severity: "info", title: "SSH Port (22) Open", cvssScore: 0, description: "SSH port 22 is open and accepting connections.", remediation: "Restrict SSH access via firewall rules to known IP ranges.", assetId: prodWebAsset?.id, details: { checkModule: "port-scan", port: 22, target: "10.0.1.10" } },
+  ];
+
+  // Scan 2 findings (8)
+  const scan2Findings = [
+    { severity: "critical", title: "RDP Port (3389) Open — BlueKeep Risk", cveId: "CVE-2019-0708", cvssScore: 9.8, description: "RDP port exposed, vulnerable to BlueKeep remote code execution.", remediation: "Disable RDP or use NLA, restrict access via VPN.", assetId: prodWebAsset?.id, details: { checkModule: "port-scan", port: 3389, target: "10.0.1.10" } },
+    { severity: "high", title: "Telnet Port (23) Open — Unencrypted Protocol", cvssScore: 8.1, description: "Telnet transmits all data including credentials in plaintext.", remediation: "Disable Telnet and use SSH for remote access.", assetId: null, details: { checkModule: "port-scan", port: 23, target: "10.0.0.1" } },
+    { severity: "high", title: "Database Port Exposed to Network (MySQL 3306)", cvssScore: 8.1, description: "MySQL port 3306 is directly accessible from untrusted networks.", remediation: "Restrict database access via firewall rules.", assetId: null, details: { checkModule: "port-scan", port: 3306, target: "10.0.1.11" } },
+    { severity: "medium", title: "FTP Port (21) Open — Unencrypted File Transfer", cvssScore: 6.5, description: "FTP transmits credentials and data in plaintext.", remediation: "Replace FTP with SFTP. Disable anonymous access.", assetId: prodWebAsset?.id, details: { checkModule: "port-scan", port: 21, target: "10.0.1.10" } },
+    { severity: "medium", title: "Missing Content-Security-Policy Header", cvssScore: 5.4, description: "CSP not set on secondary web server.", remediation: "Add Content-Security-Policy header.", assetId: null, details: { checkModule: "http-headers", target: "10.0.1.11" } },
+    { severity: "medium", title: "Unexpected Open Port Detected (SMB 445)", cvssScore: 5.3, description: "SMB port 445 is open, potentially exposing file shares.", remediation: "Investigate and close if not needed.", assetId: prodWebAsset?.id, details: { checkModule: "port-scan", port: 445, target: "10.0.1.10" } },
+    { severity: "low", title: "X-Powered-By Header Exposed", cvssScore: 3.7, description: "X-Powered-By reveals technology stack (Express).", remediation: "Remove X-Powered-By header.", assetId: prodWebAsset?.id, details: { checkModule: "http-headers", poweredBy: "Express", target: "10.0.1.10" } },
+    { severity: "info", title: "SSH Port (22) Open", cvssScore: 0, description: "SSH is accessible on the firewall device.", remediation: "Restrict to management VLAN.", assetId: null, details: { checkModule: "port-scan", port: 22, target: "10.0.0.1" } },
+  ];
+
+  // Scan 3 findings (10)
+  const scan3Findings = [
+    { severity: "high", title: "Self-Signed SSL/TLS Certificate Detected", cveId: "CWE-295", cvssScore: 7.5, description: "Server uses a self-signed certificate, vulnerable to MITM attacks.", remediation: "Replace with a certificate from a trusted CA.", assetId: stagingAsset?.id, details: { checkModule: "ssl-tls", target: "10.1.1.10" } },
+    { severity: "high", title: "Weak SSL/TLS Protocol Supported (TLS 1.0/1.1)", cveId: "CVE-2014-3566", cvssScore: 7.5, description: "Server supports deprecated TLS versions with known vulnerabilities.", remediation: "Disable TLS 1.0 and 1.1. Support only TLS 1.2+.", assetId: stagingAsset?.id, details: { checkModule: "ssl-tls", weakProtocols: ["TLS 1.0"], target: "10.1.1.10" } },
+    { severity: "medium", title: "Missing SPF Record", cvssScore: 5.3, description: "No SPF record found, enabling email spoofing.", remediation: "Add SPF TXT record to DNS.", assetId: null, details: { checkModule: "dns-checks", domain: "exargen.io", target: "10.1.1.10" } },
+    { severity: "medium", title: "Missing DMARC Record", cvssScore: 5.3, description: "No DMARC record found, no email authentication reporting.", remediation: "Add DMARC TXT record at _dmarc.exargen.io.", assetId: null, details: { checkModule: "dns-checks", domain: "exargen.io", target: "10.1.1.10" } },
+    { severity: "medium", title: "Missing Content-Security-Policy Header", cvssScore: 5.4, description: "CSP not set on staging server.", remediation: "Add Content-Security-Policy header.", assetId: stagingAsset?.id, details: { checkModule: "http-headers", target: "10.1.1.10" } },
+    { severity: "medium", title: "Directory Listing Enabled", cveId: "CWE-548", cvssScore: 5.3, description: "Web server has directory listing enabled.", remediation: "Disable directory listing. For Nginx: autoindex off;", assetId: null, details: { checkModule: "info-disclosure", target: "10.3.1.10" } },
+    { severity: "medium", title: "Git Repository (.git) Exposed", cveId: "CWE-538", cvssScore: 9.1, description: "The .git directory is accessible, allowing source code reconstruction.", remediation: "Block access to .git directories.", assetId: null, details: { checkModule: "info-disclosure", target: "10.3.1.10" } },
+    { severity: "low", title: "Missing DNSSEC", cvssScore: 3.7, description: "DNSSEC not configured for the domain.", remediation: "Enable DNSSEC through your DNS provider.", assetId: null, details: { checkModule: "dns-checks", target: "10.1.1.10" } },
+    { severity: "low", title: "Missing Permissions-Policy Header", cvssScore: 2.6, description: "Browser features like camera/microphone not restricted.", remediation: "Add Permissions-Policy header.", assetId: stagingAsset?.id, details: { checkModule: "http-headers", target: "10.1.1.10" } },
+    { severity: "low", title: "Missing X-Content-Type-Options Header", cvssScore: 3.1, description: "Browsers may perform MIME-type sniffing.", remediation: "Add X-Content-Type-Options: nosniff", assetId: stagingAsset?.id, details: { checkModule: "http-headers", target: "10.1.1.10" } },
+  ];
+
+  for (const findings of [
+    { scanId: scan1.id, items: scan1Findings },
+    { scanId: scan2.id, items: scan2Findings },
+    { scanId: scan3.id, items: scan3Findings },
+  ]) {
+    await prisma.scanResult.createMany({
+      data: findings.items.map(f => ({
+        id: uuid(),
+        tenantId: tenant.id,
+        scanId: findings.scanId,
+        severity: f.severity,
+        title: f.title,
+        description: f.description,
+        cveId: f.cveId || null,
+        cvssScore: f.cvssScore,
+        status: "open",
+        remediation: f.remediation,
+        assetId: f.assetId || null,
+        details: JSON.stringify(f.details),
+      })),
+    });
+  }
+  console.log(`   ✅ 3 scans, ${scan1Findings.length + scan2Findings.length + scan3Findings.length} findings seeded\n`);
+
+  // ─── 18. Seed SIEM Events & Alerts (Phase 7) ─────────────────────
+  console.log("🔔 Seeding SIEM events and alerts...");
+
+  await prisma.siemAlert.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.siemEvent.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.siemRule.deleteMany({ where: { tenantId: tenant.id } });
+
+  // Create SIEM rule
+  const critRule = await prisma.siemRule.create({
+    data: {
+      id: uuid(), tenantId: tenant.id,
+      name: "Critical Vulnerability Detected",
+      description: "Fires when a scan discovers a critical severity vulnerability",
+      severity: "critical",
+      condition: JSON.stringify({ severity: "critical", source: "scanner" }),
+      isActive: true,
+    },
+  });
+
+  const siemEvents = [
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Potential Log4Shell (Log4j RCE) Vulnerability", sourceIp: "10.0.2.10", offset: 2 * DAY },
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Environment File (.env) Accessible", sourceIp: "10.0.1.10", offset: 2 * DAY - 5000 },
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] RDP Port (3389) Open — BlueKeep Risk", sourceIp: "10.0.1.10", offset: 1 * DAY },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Database Port Exposed to Network", sourceIp: "10.0.3.10", offset: 2 * DAY - 10000 },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] SSL/TLS Certificate Expiring Within 30 Days", sourceIp: "10.0.1.10", offset: 2 * DAY - 15000 },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Admin Panel Exposed", sourceIp: "10.0.1.10", offset: 2 * DAY - 20000 },
+    { source: "auth", severity: "info", category: "authentication", title: "User login successful: admin@exargen.com", sourceIp: "203.0.113.42", offset: 3 * HOUR },
+    { source: "auth", severity: "medium", category: "authentication", title: "Failed login attempt: unknown@exargen.com", sourceIp: "198.51.100.17", offset: 5 * HOUR },
+    { source: "auth", severity: "info", category: "authentication", title: "MFA verification successful: admin@exargen.com", sourceIp: "203.0.113.42", offset: 2 * HOUR },
+    { source: "system", severity: "info", category: "system", title: "Vulnerability scan started: Infrastructure Vulnerability Scan", sourceIp: null, offset: 2 * DAY + 1000 },
+    { source: "system", severity: "info", category: "system", title: "Vulnerability scan completed: 12 findings discovered", sourceIp: null, offset: 2 * DAY - 45000 },
+    { source: "system", severity: "low", category: "system", title: "Security policy updated: password complexity requirements changed", sourceIp: "203.0.113.42", offset: 4 * HOUR },
+  ];
+
+  for (const evt of siemEvents) {
+    await prisma.siemEvent.create({
+      data: {
+        id: uuid(), tenantId: tenant.id,
+        source: evt.source, severity: evt.severity, category: evt.category,
+        title: evt.title, sourceIp: evt.sourceIp, destIp: null,
+        details: JSON.stringify({ automated: evt.source === "scanner" }),
+        createdAt: new Date(Date.now() - evt.offset),
+      },
+    });
+  }
+
+  // SIEM Alerts
+  const siemAlerts = [
+    { severity: "critical", title: "Critical: Potential Log4Shell (Log4j RCE) Vulnerability", description: "Critical vulnerability found during Infrastructure Vulnerability Scan", status: "open", offset: 2 * DAY },
+    { severity: "critical", title: "Critical: Environment File (.env) Accessible", description: "Sensitive configuration exposed on production web server", status: "investigating", offset: 2 * DAY - 5000 },
+    { severity: "critical", title: "Critical: RDP Port (3389) Open — BlueKeep Risk", description: "BlueKeep-vulnerable RDP exposed on production server", status: "open", offset: 1 * DAY },
+  ];
+
+  for (const alert of siemAlerts) {
+    await prisma.siemAlert.create({
+      data: {
+        id: uuid(), tenantId: tenant.id, ruleId: critRule.id,
+        severity: alert.severity, title: alert.title,
+        description: alert.description, status: alert.status,
+        createdAt: new Date(Date.now() - alert.offset),
+        acknowledgedAt: alert.status === "investigating" ? new Date(Date.now() - alert.offset + 2 * HOUR) : null,
+      },
+    });
+  }
+  console.log(`   ✅ ${siemEvents.length} SIEM events, ${siemAlerts.length} alerts seeded\n`);
+
+  // ─── 19. Seed AI Actions (Phase 7) ───────────────────────────────
+  console.log("🤖 Seeding AI actions...");
+
+  await prisma.aiAction.deleteMany({ where: { tenantId: tenant.id } });
+
+  const aiActions = [
+    { type: "remediation", title: "Remediate: Potential Log4Shell (Log4j RCE) Vulnerability", description: "Update Log4j to version 2.17.1 or later on API server 10.0.2.10", riskLevel: "critical", status: "pending", config: { scanId: scan1.id, cveId: "CVE-2021-44228", target: "10.0.2.10", action: "patch" } },
+    { type: "remediation", title: "Remediate: Environment File (.env) Accessible", description: "Block access to .env files on web server. Rotate all exposed credentials.", riskLevel: "critical", status: "pending", config: { scanId: scan1.id, target: "10.0.1.10", action: "config_change" } },
+    { type: "remediation", title: "Remediate: RDP Port (3389) Exposed", description: "Disable RDP or restrict access via VPN on 10.0.1.10", riskLevel: "critical", status: "pending", config: { scanId: scan2.id, cveId: "CVE-2019-0708", target: "10.0.1.10", action: "firewall_rule" } },
+    { type: "patch", title: "Apply SSL Certificate Renewal", description: "Renew SSL/TLS certificate for exg-web-prod-01 before expiry in 18 days", riskLevel: "high", status: "pending", config: { scanId: scan1.id, target: "10.0.1.10", action: "cert_renewal" } },
+    { type: "firewall_rule", title: "Block Database Port External Access", description: "Add firewall rule to restrict PostgreSQL 5432 to application servers only", riskLevel: "high", status: "approved", config: { scanId: scan1.id, target: "10.0.3.10", port: 5432, action: "firewall_rule" }, approvedAt: new Date(Date.now() - 1 * DAY) },
+    { type: "patch", title: "Disable TLS 1.0/1.1 on Staging", description: "Configure staging server to support only TLS 1.2 and TLS 1.3", riskLevel: "medium", status: "approved", config: { scanId: scan3.id, target: "10.1.1.10", action: "config_change" }, approvedAt: new Date(Date.now() - 8 * HOUR) },
+    { type: "remediation", title: "Remove .git Directory from Web Root", description: "Block access to .git directory on development server 10.3.1.10", riskLevel: "high", status: "executed", config: { scanId: scan3.id, target: "10.3.1.10", action: "config_change" }, approvedAt: new Date(Date.now() - 10 * HOUR), executedAt: new Date(Date.now() - 9 * HOUR) },
+    { type: "siem_rule", title: "Create SIEM Rule for Telnet Access", description: "Monitor and alert on any Telnet (port 23) connection attempts", riskLevel: "medium", status: "rejected", config: { target: "10.0.0.1", port: 23, action: "monitoring" } },
+  ];
+
+  for (const action of aiActions) {
+    await prisma.aiAction.create({
+      data: {
+        id: uuid(), tenantId: tenant.id,
+        type: action.type, title: action.title, description: action.description,
+        riskLevel: action.riskLevel, status: action.status,
+        config: JSON.stringify(action.config),
+        approvedAt: (action as Record<string, unknown>).approvedAt as Date | undefined,
+        executedAt: (action as Record<string, unknown>).executedAt as Date | undefined,
+      },
+    });
+  }
+  console.log(`   ✅ ${aiActions.length} AI actions seeded\n`);
+
   // ─── Summary ─────────────────────────────────────────────────────
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 4+)");
+  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 7)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  ${CAPABILITIES.length} capabilities · ${BUILTIN_ROLES.length} roles · 6 scopes`);
   console.log(`  ${tagDefinitions.length} tags · ${assetDefinitions.length} assets · ${autoTagRules.length} auto-tag rules`);
   console.log(`  ${auditEvents.length} audit events (hash-chained) · ${sessionDefinitions.length} sessions`);
+  console.log(`  3 scans · 30 findings · ${siemEvents.length} SIEM events · ${aiActions.length} AI actions`);
   console.log(`  5 users (1 admin + ${demoUsers.length} demo users)`);
   console.log("");
   console.log("  Login Credentials:");

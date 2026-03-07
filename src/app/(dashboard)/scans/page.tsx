@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
+import { useRouter } from "next/navigation";
 
 interface ScanItem {
   id: string;
@@ -58,6 +59,7 @@ export default function ScansPage() {
   const [loading, setLoading] = useState(true);
   const [showNewScan, setShowNewScan] = useState(false);
   const [creating, setCreating] = useState(false);
+  const router = useRouter();
   const [scanForm, setScanForm] = useState({
     name: "",
     type: "vulnerability",
@@ -172,6 +174,7 @@ export default function ScansPage() {
               return (
                 <div
                   key={scan.id}
+                  onClick={() => router.push(`/scans/${scan.id}`)}
                   className="flex items-center gap-4 p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
                 >
                   <StatusIcon className={cn("w-5 h-5 flex-shrink-0", config.color, scan.status === "running" && "animate-spin")} />

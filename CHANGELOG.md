@@ -4,6 +4,78 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [1.0.0] — 2026-03-07 — Phase 7: Built-in Vulnerability Scanner Engine
+
+Phase 7: Scanner Engine + Downstream Integration | 93 routes, 0 TypeScript errors, 213/213 E2E tests
+
+### Added
+- **Vulnerability Scanner Engine** — 8 real network check modules (HTTP headers, SSL/TLS, port scan, exposed panels, info disclosure, common CVEs, DNS checks, cloud misconfig) using only Node.js built-in modules (`net`, `tls`, `dns`, `https`). Zero external dependencies.
+- **Vulnerability Database** (`src/lib/scanner/vulnerability-db.ts`) — ~50 real CVE entries with titles, descriptions, CVSS scores, severity ratings, and remediation guidance
+- **Chunked Execution Model** — Each `/api/scans/[id]/execute` call runs 2 check modules (< 7s), saves progress to DB, returns. Client polls until completed. Designed for Vercel's 10s serverless timeout.
+- **Scanner Adapter Pattern** — `ScannerAdapter` interface with `BuiltinAdapter` implementation. Extensible for future Nuclei integration.
+- **Scan Detail Page** (`/scans/[id]`) — Severity stat cards, progress bar, expandable findings table with CVE links, CVSS scores, remediation, status actions (Acknowledge/Resolve/False Positive), CSV/JSON export
+- **Asset Detail Page** (`/assets/[id]`) — Risk score, open findings count, last scan timestamp, IP/hostname, severity breakdown, related findings from all scans, tags
+- **AI Actions PATCH endpoint** (`/api/ai-actions/[id]`) — Approve, reject, execute AI action suggestions with audit logging
+- **Scan Results API** (`/api/scans/[id]/results`) — Paginated findings with severity/status filters, custom severity sort order
+- **Finding Status Updates** (`/api/scans/[id]/results/[resultId]`) — Update finding status: open → acknowledged / resolved / false_positive
+- **Scan Export** (`/api/scans/[id]/export`) — CSV and JSON export with Content-Disposition headers
+- **Seed Data** — 3 completed scans (30 real findings), 12 SIEM events, 3 alerts, 8 AI actions for production demo
+- **22 new E2E tests** (`15-scanner-engine.spec.ts`) covering scanner API, scan detail UI, asset detail UI, and downstream integration
+
+### Changed
+- **Scan create route** (`/api/scans/create`) — Removed `setTimeout` mock; now initializes progress tracking, auto-creates Asset records for unknown targets, uses `checkCapability` (v2)
+- **Scans list page** (`/scans`) — Scan rows now clickable, link to `/scans/[id]` detail page
+- **Assets list page** (`/assets`) — Asset rows now clickable, link to `/assets/[id]` detail page
+- **AI Actions page** (`/ai-actions`) — Approve/reject buttons now functional via PATCH endpoint
+- **Prisma schema** — Added `progress` field to Scan model
+
+### New Files (22)
+| File | Purpose |
+|------|---------|
+| `src/lib/scanner/types.ts` | Scanner engine TypeScript interfaces |
+| `src/lib/scanner/vulnerability-db.ts` | ~50 real CVE entries with remediation |
+| `src/lib/scanner/index.ts` | Engine orchestration + batch execution |
+| `src/lib/scanner/adapters/builtin.ts` | Built-in adapter for check modules |
+| `src/lib/scanner/checks/http-headers.ts` | HTTP security header analysis |
+| `src/lib/scanner/checks/ssl-tls.ts` | SSL/TLS certificate + protocol checks |
+| `src/lib/scanner/checks/port-scan.ts` | TCP port scanning (15 common ports) |
+| `src/lib/scanner/checks/exposed-panels.ts` | Admin panel detection |
+| `src/lib/scanner/checks/info-disclosure.ts` | Server info + file exposure |
+| `src/lib/scanner/checks/common-cves.ts` | Known CVE signature detection |
+| `src/lib/scanner/checks/dns-checks.ts` | DNS security record validation |
+| `src/lib/scanner/checks/cloud-misconfig.ts` | Cloud storage + metadata exposure |
+| `src/app/api/scans/[id]/route.ts` | Scan detail API |
+| `src/app/api/scans/[id]/execute/route.ts` | Chunked scan execution |
+| `src/app/api/scans/[id]/results/route.ts` | Findings list with filters |
+| `src/app/api/scans/[id]/results/[resultId]/route.ts` | Finding status updates |
+| `src/app/api/scans/[id]/export/route.ts` | CSV/JSON export |
+| `src/app/api/assets/[id]/route.ts` | Asset detail with findings |
+| `src/app/api/ai-actions/[id]/route.ts` | AI action state management |
+| `src/app/(dashboard)/scans/[id]/page.tsx` | Scan detail page |
+| `src/app/(dashboard)/assets/[id]/page.tsx` | Asset detail page |
+| `tests/e2e/15-scanner-engine.spec.ts` | 22 E2E tests |
+
+### New API Endpoints (7 route files)
+| Method | Endpoint | Purpose | Auth |
+|--------|----------|---------|------|
+| GET | `/api/scans/[id]` | Scan detail + severity counts | `scan.view` |
+| POST | `/api/scans/[id]/execute` | Execute next check batch | `scan.execute` |
+| GET | `/api/scans/[id]/results` | Paginated findings list | `scan.view` |
+| PATCH | `/api/scans/[id]/results/[resultId]` | Update finding status | `scan.execute` |
+| GET | `/api/scans/[id]/export` | Export as CSV/JSON | `scan.export` |
+| GET | `/api/assets/[id]` | Asset detail + related findings | `asset.view` |
+| PATCH | `/api/ai-actions/[id]` | Approve/reject/execute AI action | `ai.approve.standard` |
+
+### Build Metrics
+- Routes: 87 → 93 (+6)
+- E2E tests: 191 → 213 (+22)
+- TypeScript errors: 0
+- Scanner check modules: 0 → 8
+- Vulnerability DB entries: 0 → ~50 real CVEs
+- Detail pages: 0 → 2
+
+---
+
 ## [0.9.0] — 2026-03-06 — Phase 6: Enterprise SSO, MFA & SCIM 2.0
 
 ### Added

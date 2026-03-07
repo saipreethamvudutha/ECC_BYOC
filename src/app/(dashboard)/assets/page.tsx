@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
+import { useRouter } from "next/navigation";
 
 interface AssetTag {
   id: string;
@@ -76,6 +77,7 @@ const statusVariants: Record<string, "success" | "secondary" | "destructive"> = 
 };
 
 export default function AssetsPage() {
+  const router = useRouter();
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -292,6 +294,7 @@ export default function AssetsPage() {
               return (
                 <div
                   key={asset.id}
+                  onClick={() => router.push(`/assets/${asset.id}`)}
                   className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
                 >
                   {/* Name */}

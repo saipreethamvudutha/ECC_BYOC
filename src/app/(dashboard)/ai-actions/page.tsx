@@ -34,6 +34,7 @@ interface AiActionItem {
 
 const typeIcons: Record<string, React.ElementType> = {
   patch: Shield,
+  remediation: Shield,
   firewall_rule: Flame,
   risk_override: AlertTriangle,
   siem_rule: Zap,
@@ -42,6 +43,7 @@ const typeIcons: Record<string, React.ElementType> = {
 
 const typeLabels: Record<string, string> = {
   patch: "Patch Deployment",
+  remediation: "Remediation",
   firewall_rule: "Firewall Rule",
   risk_override: "Risk Override",
   siem_rule: "SIEM Rule",
@@ -67,14 +69,37 @@ export default function AiActionsPage() {
   const [actions, setActions] = useState<AiActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<string | null>(null);
 
-  useEffect(() => {
+  function loadActions() {
     fetch("/api/ai-actions")
       .then((res) => res.json())
       .then(setActions)
       .catch(console.error)
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadActions();
   }, []);
+
+  async function handleAction(actionId: string, action: "approve" | "reject") {
+    setProcessing(actionId);
+    try {
+      const res = await fetch(`/api/ai-actions/${actionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        loadActions();
+      }
+    } catch (err) {
+      console.error("Action error:", err);
+    } finally {
+      setProcessing(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -203,10 +228,22 @@ export default function AiActionsPage() {
                     </Badge>
                     {action.status === "pending" && (
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-emerald-400 hover:text-emerald-300">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-emerald-400 hover:text-emerald-300"
+                          disabled={processing === action.id}
+                          onClick={(e) => { e.stopPropagation(); handleAction(action.id, "approve"); }}
+                        >
                           Approve
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-red-400 hover:text-red-300">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-red-400 hover:text-red-300"
+                          disabled={processing === action.id}
+                          onClick={(e) => { e.stopPropagation(); handleAction(action.id, "reject"); }}
+                        >
                           Reject
                         </Button>
                       </div>

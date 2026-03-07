@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/audit";
+import { initializeProgress } from "@/lib/scanner";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
+  const allowed = await rbac.checkCapability(
     session.id, session.tenantId, "scan.create"
   );
   if (!allowed) {
@@ -26,6 +27,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const validTypes = ["vulnerability", "port", "compliance", "full"];
+  if (!validTypes.includes(type)) {
+    return NextResponse.json(
+      { error: `Invalid scan type. Must be one of: ${validTypes.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  try {
+  // Initialize scan progress based on type
+  const progress = initializeProgress(type);
+
   const scan = await prisma.scan.create({
     data: {
       tenantId: session.tenantId,
@@ -33,54 +46,41 @@ export async function POST(request: NextRequest) {
       type,
       status: "queued",
       targets: JSON.stringify(targets),
+      progress: JSON.stringify(progress),
       createdById: session.id,
     },
   });
 
-  // Simulate scan execution (mark as running then complete after a delay)
-  setTimeout(async () => {
-    try {
-      await prisma.scan.update({
-        where: { id: scan.id },
-        data: { status: "running", startedAt: new Date() },
+  // Auto-create Asset records for targets that don't exist
+  for (const target of targets) {
+    const host = target.replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+
+    const existing = await prisma.asset.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        OR: [
+          { ipAddress: host },
+          { hostname: host },
+          { name: host },
+        ],
+      },
+    });
+
+    if (!existing) {
+      await prisma.asset.create({
+        data: {
+          tenantId: session.tenantId,
+          name: host,
+          type: isIp ? "server" : "application",
+          ipAddress: isIp ? host : null,
+          hostname: isIp ? null : host,
+          criticality: "medium",
+          status: "active",
+        },
       });
-
-      // Simulate scan completing after 5 seconds
-      setTimeout(async () => {
-        try {
-          // Generate some mock findings
-          const severities = ["critical", "high", "medium", "low", "info"];
-          const findings = [];
-          const numFindings = Math.floor(Math.random() * 8) + 2;
-
-          for (let i = 0; i < numFindings; i++) {
-            const severity = severities[Math.floor(Math.random() * severities.length)];
-            findings.push({
-              tenantId: session.tenantId,
-              scanId: scan.id,
-              severity,
-              title: `Finding ${i + 1}: ${severity.toUpperCase()} level issue detected`,
-              cvssScore: severity === "critical" ? 9.0 + Math.random()
-                : severity === "high" ? 7.0 + Math.random() * 2
-                : severity === "medium" ? 4.0 + Math.random() * 3
-                : severity === "low" ? 1.0 + Math.random() * 3
-                : 0,
-            });
-          }
-
-          await prisma.scanResult.createMany({ data: findings });
-          await prisma.scan.update({
-            where: { id: scan.id },
-            data: { status: "completed", completedAt: new Date() },
-          });
-        } catch (e) {
-          console.error("Scan completion error:", e);
-        }
-      }, 5000);
-    } catch (e) {
-      console.error("Scan start error:", e);
     }
-  }, 2000);
+  }
 
   await createAuditLog({
     tenantId: session.tenantId,
@@ -99,6 +99,14 @@ export async function POST(request: NextRequest) {
     name: scan.name,
     type: scan.type,
     status: scan.status,
-    message: "Scan created and queued",
+    progress,
+    message: "Scan created and queued. Call /api/scans/{id}/execute to start.",
   });
+  } catch (error) {
+    console.error("Scan create error:", error);
+    return NextResponse.json(
+      { error: "Failed to create scan", details: String(error) },
+      { status: 500 }
+    );
+  }
 }

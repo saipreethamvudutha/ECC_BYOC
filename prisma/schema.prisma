@@ -418,6 +418,7 @@ model Scan {
   status      String    @default("queued") // queued, running, completed, failed, cancelled
   targets     String    @default("[]") // JSON array of target IPs/ranges
   config      String    @default("{}") // JSON scan configuration
+  progress    String    @default("{}") // JSON: { completedChecks: [], currentBatch: 0, totalBatches: N }
   startedAt   DateTime?
   completedAt DateTime?
   createdById String?
