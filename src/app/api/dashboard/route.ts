@@ -20,7 +20,7 @@ export async function GET() {
 
   const tenantId = session.tenantId;
 
-  // Parallel queries for dashboard stats
+  // All queries in parallel — no sequential waits
   const [
     totalAssets,
     scanResults,
@@ -29,6 +29,7 @@ export async function GET() {
     pendingAiActions,
     complianceControls,
     recentAuditLogs,
+    frameworks,
   ] = await Promise.all([
     prisma.asset.count({ where: { tenantId } }),
     prisma.scanResult.groupBy({
@@ -49,6 +50,14 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       take: 10,
       include: { actor: { select: { name: true, email: true } } },
+    }),
+    prisma.complianceFramework.findMany({
+      where: { tenantId },
+      include: {
+        controls: {
+          select: { status: true },
+        },
+      },
     }),
   ]);
 
@@ -76,16 +85,6 @@ export async function GET() {
         totalFindings * (totalFindings / 3)
       ))
     : 0;
-
-  // Format compliance overview by framework
-  const frameworks = await prisma.complianceFramework.findMany({
-    where: { tenantId },
-    include: {
-      controls: {
-        select: { status: true },
-      },
-    },
-  });
 
   const complianceOverview = frameworks.map(fw => {
     const total = fw.controls.length;
