@@ -346,6 +346,10 @@ Scanner completes
 
 3. **Prisma client stale after schema change** — Adding `progress` field required `prisma generate` to regenerate the client. The dev server used a stale client, causing "Unknown argument `progress`" errors.
 
+4. **Dashboard API sequential query** — The compliance framework query (`prisma.complianceFramework.findMany`) ran sequentially after the main `Promise.all` block, adding ~500ms latency on every dashboard load. Fixed by moving it inside the `Promise.all` block so all 8 queries run in parallel.
+
+5. **Notification bell non-functional** — The topbar notification bell (`<Button>`) had no `onClick` handler — purely cosmetic. Fixed by adding a full notification dropdown that fetches live SIEM alerts on mount, displays up to 5 open/investigating alerts with severity badges and timestamps, and links to `/siem` for the full view.
+
 ---
 
 ## Deferred Work

@@ -4,6 +4,25 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [1.0.1] — 2026-03-08 — Post-Phase 7: Dashboard Performance + Notification Bell
+
+### Fixed
+- **Dashboard API latency** — Compliance framework query was running sequentially after the main `Promise.all` block, adding ~500ms to every dashboard load. Moved into the parallel query block so all 8 dashboard queries execute concurrently.
+- **Notification bell non-functional** — Bell icon in the topbar had no click handler (purely cosmetic). Replaced with a fully interactive alert dropdown that:
+  - Fetches live SIEM alerts on component mount
+  - Displays up to 5 open/investigating alerts with severity badges (critical/high/medium/low), source labels, and relative timestamps
+  - Pulsing red badge with open alert count
+  - "View all in SIEM" footer link navigates to `/siem`
+  - Click-outside-to-close behavior matching the user menu pattern
+
+### Changed
+| File | Change |
+|------|--------|
+| `src/app/api/dashboard/route.ts` | Moved `complianceFramework.findMany` into `Promise.all` (8 parallel queries, 0 sequential) |
+| `src/components/layout/topbar.tsx` | Full notification dropdown with live SIEM alert data, severity icons, click handling |
+
+---
+
 ## [1.0.0] — 2026-03-07 — Phase 7: Built-in Vulnerability Scanner Engine
 
 Phase 7: Scanner Engine + Downstream Integration | 93 routes, 0 TypeScript errors, 213/213 E2E tests
