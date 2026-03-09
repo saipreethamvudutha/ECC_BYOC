@@ -247,6 +247,18 @@ async function main() {
           status: "active",
         },
       });
+    } else {
+      // Update existing asset to ensure seed data is current
+      asset = await prisma.asset.update({
+        where: { id: asset.id },
+        data: {
+          type: assetDef.type,
+          hostname: assetDef.hostname,
+          ipAddress: assetDef.ipAddress,
+          os: assetDef.os,
+          criticality: assetDef.criticality,
+        },
+      });
     }
 
     // Assign tags
@@ -1171,7 +1183,6 @@ async function main() {
     await prisma.asset.update({
       where: { id: prodDbAsset.id },
       data: {
-        os: "Linux (Ubuntu)",
         discoveryMethod: "scanner",
         discoveredAt: new Date(Date.now() - 6 * HOUR),
         networkRole: "server",
