@@ -79,6 +79,16 @@ export async function GET(
     tags: asset.assetTags.map((at) => at.tag),
     riskScore,
     severityCounts,
+    // Phase 8: Discovery fields
+    macAddress: asset.macAddress,
+    manufacturer: asset.manufacturer,
+    model: asset.model,
+    firmware: asset.firmware,
+    networkRole: asset.networkRole,
+    services: safeParse(asset.services),
+    openPorts: safeParse(asset.openPorts),
+    discoveryMethod: asset.discoveryMethod,
+    discoveredAt: asset.discoveredAt?.toISOString() || null,
     findings: asset.scanResults.map((r) => ({
       id: r.id,
       severity: r.severity,

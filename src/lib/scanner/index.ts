@@ -261,16 +261,128 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
       }
     }
 
-    // 2. Update Asset.lastScanAt for matched targets
+    // 2. Update Asset records with discovery data + lastScanAt
     for (const target of targets) {
       const host = target.replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
-      await prisma.asset.updateMany({
+      const matchingAssets = await prisma.asset.findMany({
         where: {
           tenantId,
           OR: [{ ipAddress: host }, { hostname: host }, { name: host }],
         },
-        data: { lastScanAt: new Date() },
+        select: { id: true },
       });
+
+      // Base update: lastScanAt + discoveryMethod
+      const updateData: Record<string, unknown> = {
+        lastScanAt: new Date(),
+        discoveryMethod: scan.type === "discovery" ? "scanner" : undefined,
+        discoveredAt: scan.type === "discovery" ? new Date() : undefined,
+      };
+
+      // Extract OS fingerprint data from scan results
+      const osResult = scan.results.find((r) => {
+        try {
+          const details = JSON.parse(r.details);
+          return details.checkModule === "os-fingerprint" && details.osFamily && details.osFamily !== "Unknown";
+        } catch { return false; }
+      });
+      if (osResult) {
+        try {
+          const details = JSON.parse(osResult.details);
+          const osDisplay = details.osVersion
+            ? `${details.osFamily} (${details.osVersion})`
+            : details.osFamily;
+          updateData.os = osDisplay;
+        } catch { /* ignore */ }
+      }
+
+      // Extract service detection data
+      const serviceResult = scan.results.find((r) => {
+        try {
+          const details = JSON.parse(r.details);
+          return details.checkModule === "service-detection" && details.services;
+        } catch { return false; }
+      });
+      if (serviceResult) {
+        try {
+          const details = JSON.parse(serviceResult.details);
+          if (details.services) {
+            updateData.services = JSON.stringify(details.services);
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Extract open ports from port scan
+      const portResult = scan.results.find((r) => {
+        try {
+          const details = JSON.parse(r.details);
+          return details.checkModule === "port-scan" && details.ports;
+        } catch { return false; }
+      });
+      if (portResult) {
+        try {
+          const details = JSON.parse(portResult.details);
+          if (details.ports) {
+            updateData.openPorts = JSON.stringify(details.ports.map((p: { port: number }) => p.port));
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Extract network discovery data (device type, manufacturer)
+      const discoveryResult = scan.results.find((r) => {
+        try {
+          const details = JSON.parse(r.details);
+          return details.checkModule === "network-discovery" && details.deviceType;
+        } catch { return false; }
+      });
+      if (discoveryResult) {
+        try {
+          const details = JSON.parse(discoveryResult.details);
+          if (details.deviceType && details.deviceType !== "unknown") {
+            updateData.networkRole = details.deviceType;
+            // Map device type to asset type
+            const typeMap: Record<string, string> = {
+              "network_device": "network_device",
+              "printer": "iot_device",
+              "iot_device": "iot_device",
+              "workstation": "workstation",
+              "server": "server",
+            };
+            if (typeMap[details.deviceType]) {
+              updateData.type = typeMap[details.deviceType];
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Extract cloud provider info
+      const cloudResult = scan.results.find((r) => {
+        try {
+          const details = JSON.parse(r.details);
+          return details.checkModule === "cloud-inventory" && details.provider;
+        } catch { return false; }
+      });
+      if (cloudResult) {
+        try {
+          const details = JSON.parse(cloudResult.details);
+          if (details.provider) {
+            updateData.type = "cloud_resource";
+            updateData.manufacturer = details.providerName || details.provider;
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Clean up undefined values
+      const cleanData = Object.fromEntries(
+        Object.entries(updateData).filter(([, v]) => v !== undefined)
+      );
+
+      for (const asset of matchingAssets) {
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: cleanData,
+        });
+      }
     }
 
     // 3. Create AI action suggestions for critical findings

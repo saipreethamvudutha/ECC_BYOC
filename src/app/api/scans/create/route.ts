@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validTypes = ["vulnerability", "port", "compliance", "full"];
+  const validTypes = ["vulnerability", "port", "compliance", "full", "discovery"];
   if (!validTypes.includes(type)) {
     return NextResponse.json(
       { error: `Invalid scan type. Must be one of: ${validTypes.join(", ")}` },

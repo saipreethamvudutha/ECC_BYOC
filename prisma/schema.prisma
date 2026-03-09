@@ -387,7 +387,7 @@ model Asset {
   id           String   @id @default(uuid())
   tenantId     String
   name         String
-  type         String   // server, workstation, network_device, cloud_resource, application, database
+  type         String   // server, workstation, network_device, cloud_resource, application, database, container, iot_device
   ipAddress    String?
   hostname     String?
   os           String?
@@ -397,6 +397,17 @@ model Asset {
   metadata     String   @default("{}") // JSON
   groupId      String?
   lastScanAt   DateTime?
+  // ── Phase 8: Asset Discovery Fields ──
+  macAddress      String?  // MAC address if discoverable (ARP/SNMP)
+  manufacturer    String?  // Hardware vendor (e.g., "Cisco", "Dell", "AWS")
+  model           String?  // Device model (e.g., "Catalyst 9300", "PowerEdge R750")
+  firmware        String?  // Firmware/BIOS version
+  networkRole     String?  // router, switch, firewall, load_balancer, endpoint, printer, iot
+  services        String   @default("[]") // JSON: [{port, protocol, service, version, banner}]
+  openPorts       String   @default("[]") // JSON: [22, 80, 443, 3306]
+  discoveryMethod String?  // scanner, manual, cloud_api, agent, cmdb_sync
+  discoveredAt    DateTime? // When asset was first discovered by scanner
+  ttl             Int?     // TTL value from network probe (for OS fingerprinting)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -52,6 +52,7 @@ const typeLabels: Record<string, string> = {
   port: "Port Scan",
   compliance: "Compliance Scan",
   full: "Full Assessment",
+  discovery: "Asset Discovery",
 };
 
 export default function ScansPage() {
@@ -235,7 +236,7 @@ export default function ScansPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-300">Scan Type</label>
               <div className="grid grid-cols-2 gap-2">
-                {(["vulnerability", "port", "compliance", "full"] as const).map((type) => (
+                {(["vulnerability", "port", "compliance", "full", "discovery"] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setScanForm({ ...scanForm, type })}

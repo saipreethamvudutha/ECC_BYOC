@@ -16,6 +16,15 @@ import { cn, formatDateTime, severityColor } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
 import Link from "next/link";
 
+interface ServiceInfo {
+  port: number;
+  protocol?: string;
+  service: string;
+  product?: string;
+  version?: string;
+  banner?: string;
+}
+
 interface AssetDetail {
   id: string;
   name: string;
@@ -31,6 +40,16 @@ interface AssetDetail {
   tags: { id: string; key: string; value: string; color: string | null }[];
   riskScore: number;
   severityCounts: Record<string, number>;
+  // Phase 8: Discovery fields
+  macAddress: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  firmware: string | null;
+  networkRole: string | null;
+  services: ServiceInfo[];
+  openPorts: number[];
+  discoveryMethod: string | null;
+  discoveredAt: string | null;
   findings: {
     id: string;
     severity: string;
@@ -60,6 +79,8 @@ const typeIcons: Record<string, string> = {
   cloud_resource: "Cloud Resource",
   application: "Application",
   database: "Database",
+  container: "Container",
+  iot_device: "IoT Device",
 };
 
 export default function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -204,6 +225,96 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
               )}
             </CardContent>
           </Card>
+
+          {/* Discovery Details (Phase 8) */}
+          {(asset.services.length > 0 || asset.openPorts.length > 0 || asset.manufacturer || asset.networkRole) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Discovery Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  {asset.manufacturer && (
+                    <div>
+                      <p className="text-slate-500">Manufacturer</p>
+                      <p className="text-white mt-1">{asset.manufacturer}</p>
+                    </div>
+                  )}
+                  {asset.model && (
+                    <div>
+                      <p className="text-slate-500">Model</p>
+                      <p className="text-white mt-1">{asset.model}</p>
+                    </div>
+                  )}
+                  {asset.networkRole && (
+                    <div>
+                      <p className="text-slate-500">Network Role</p>
+                      <p className="text-white mt-1 capitalize">{asset.networkRole.replace(/_/g, " ")}</p>
+                    </div>
+                  )}
+                  {asset.discoveryMethod && (
+                    <div>
+                      <p className="text-slate-500">Discovery Method</p>
+                      <p className="text-white mt-1 capitalize">{asset.discoveryMethod.replace(/_/g, " ")}</p>
+                    </div>
+                  )}
+                  {asset.firmware && (
+                    <div>
+                      <p className="text-slate-500">Firmware</p>
+                      <p className="text-white mt-1 font-mono text-xs">{asset.firmware}</p>
+                    </div>
+                  )}
+                  {asset.macAddress && (
+                    <div>
+                      <p className="text-slate-500">MAC Address</p>
+                      <p className="text-white mt-1 font-mono text-xs">{asset.macAddress}</p>
+                    </div>
+                  )}
+                </div>
+
+                {asset.openPorts.length > 0 && (
+                  <div>
+                    <p className="text-slate-500 text-sm mb-2">Open Ports ({asset.openPorts.length})</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {asset.openPorts.map((port) => (
+                        <span key={port} className="px-2 py-0.5 rounded bg-slate-800 text-xs font-mono text-cyan-400 border border-slate-700">
+                          {port}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {asset.services.length > 0 && (
+                  <div>
+                    <p className="text-slate-500 text-sm mb-2">Detected Services ({asset.services.length})</p>
+                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-800/50">
+                            <th className="px-3 py-2 text-left text-slate-400 font-medium">Port</th>
+                            <th className="px-3 py-2 text-left text-slate-400 font-medium">Service</th>
+                            <th className="px-3 py-2 text-left text-slate-400 font-medium">Product</th>
+                            <th className="px-3 py-2 text-left text-slate-400 font-medium">Version</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {asset.services.map((svc, idx) => (
+                            <tr key={idx} className="border-t border-slate-800/50">
+                              <td className="px-3 py-2 font-mono text-cyan-400">{svc.port}</td>
+                              <td className="px-3 py-2 text-white">{svc.service}</td>
+                              <td className="px-3 py-2 text-slate-300">{svc.product || "—"}</td>
+                              <td className="px-3 py-2 text-slate-300 font-mono text-xs">{svc.version || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Severity Breakdown */}
           <Card>

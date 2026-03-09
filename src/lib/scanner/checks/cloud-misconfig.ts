@@ -116,6 +116,57 @@ async function checkAzureBlob(target: string): Promise<CheckResult[]> {
   return results;
 }
 
+async function checkGCPBucket(target: string): Promise<CheckResult[]> {
+  const results: CheckResult[] = [];
+  const host = target.replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+
+  // Check for GCP Storage patterns
+  const gcpMatch = host.match(/^(.+)\.storage\.googleapis\.com$/);
+  let bucketName: string | null = gcpMatch ? gcpMatch[1] : null;
+
+  if (!bucketName) {
+    // Try domain name as bucket name
+    const domainParts = host.split(".");
+    if (domainParts.length >= 2) {
+      bucketName = domainParts[0];
+    }
+  }
+
+  if (bucketName) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`https://storage.googleapis.com/${bucketName}/`, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.status === 200) {
+        const text = await res.text();
+        if (text.includes("ListBucketResult") || text.includes("<Contents>")) {
+          const vuln = getVulnById("open-gcp-bucket");
+          if (vuln) {
+            results.push({
+              title: vuln.title,
+              severity: vuln.severity,
+              description: vuln.description,
+              remediation: vuln.remediation,
+              cveId: vuln.cveId,
+              cvssScore: vuln.cvssScore,
+              details: { target, bucketName, bucketUrl: `https://storage.googleapis.com/${bucketName}/` },
+            });
+          }
+        }
+      }
+    } catch {
+      // Bucket not accessible
+    }
+  }
+
+  return results;
+}
+
 export const cloudMisconfigCheck: CheckModule = {
   id: "cloud-misconfig",
   name: "Cloud Misconfiguration Detection",
@@ -124,12 +175,13 @@ export const cloudMisconfigCheck: CheckModule = {
     const results: CheckResult[] = [];
 
     // Run cloud-specific checks in parallel
-    const [s3Results, azureResults] = await Promise.all([
+    const [s3Results, azureResults, gcpResults] = await Promise.all([
       checkS3Bucket(target),
       checkAzureBlob(target),
+      checkGCPBucket(target),
     ]);
 
-    results.push(...s3Results, ...azureResults);
+    results.push(...s3Results, ...azureResults, ...gcpResults);
     return results;
   },
 };

@@ -62,6 +62,7 @@ const typeLabels: Record<string, string> = {
   port: "Port Scan",
   compliance: "Compliance Scan",
   full: "Full Assessment",
+  discovery: "Asset Discovery",
 };
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; badge: "success" | "warning" | "destructive" | "secondary" | "default" }> = {

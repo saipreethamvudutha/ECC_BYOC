@@ -1084,7 +1084,107 @@ async function main() {
       })),
     });
   }
-  console.log(`   ✅ 3 scans, ${scan1Findings.length + scan2Findings.length + scan3Findings.length} findings seeded\n`);
+  // Phase 8: Scan 4 — Asset Discovery scan
+  const scan4 = await prisma.scan.create({
+    data: {
+      id: uuid(), tenantId: tenant.id, name: "Enterprise Asset Discovery",
+      type: "discovery", status: "completed",
+      targets: JSON.stringify(["10.0.1.10", "10.0.2.10", "10.0.3.10", "10.0.0.1"]),
+      progress: JSON.stringify({ completedChecks: ["network-discovery", "port-scan", "service-detection", "os-fingerprint", "cloud-inventory", "dns-checks", "cloud-misconfig"], currentBatch: 4, totalBatches: 4, totalFindings: 8, checkResults: { "network-discovery": 1, "port-scan": 2, "service-detection": 1, "os-fingerprint": 2, "cloud-inventory": 1, "dns-checks": 0, "cloud-misconfig": 1 } }),
+      startedAt: new Date(Date.now() - 6 * HOUR), completedAt: new Date(Date.now() - 6 * HOUR + 45000),
+      createdById: superAdmin.id,
+    },
+  });
+
+  const scan4Findings = [
+    { severity: "info", title: "Host Discovery: 10.0.1.10 is Active", description: "Host 10.0.1.10 was found active with 8 open ports. Device classification: server.", remediation: "Verify host is authorized and properly inventoried.", assetId: prodWebAsset?.id, details: { checkModule: "network-discovery", target: "10.0.1.10", hostname: "exg-web-prod-01", openPorts: [22, 80, 443, 8080], deviceType: "server", discoveryMethod: "tcp_probe" } },
+    { severity: "info", title: "OS Fingerprint: 10.0.1.10 — Linux (Ubuntu)", description: "Operating system identified as Linux (Ubuntu) with 75% confidence using ssh_banner, http_server_header methods.", remediation: "Ensure OS is up to date with all security patches.", assetId: prodWebAsset?.id, details: { checkModule: "os-fingerprint", target: "10.0.1.10", osFamily: "Linux", osVersion: "Ubuntu", confidence: 75, methods: ["ssh_banner", "http_server_header"] } },
+    { severity: "info", title: "OS Fingerprint: 10.0.0.1 — Cisco/Network Device", description: "Operating system identified as Cisco IOS with 60% confidence using port_profile method.", remediation: "Ensure network device firmware is up to date.", assetId: null, details: { checkModule: "os-fingerprint", target: "10.0.0.1", osFamily: "Cisco/Network Device", osVersion: "Cisco IOS", confidence: 60, methods: ["port_profile"] } },
+    { severity: "info", title: "Service Detection: 4 Services Identified on 10.0.1.10", description: "Service version detection identified 4 running services on 10.0.1.10.", remediation: "Review all detected services. Update any with known vulnerabilities.", assetId: prodWebAsset?.id, details: { checkModule: "service-detection", target: "10.0.1.10", serviceCount: 4, services: [{ port: 22, protocol: "tcp", service: "ssh", product: "OpenSSH", version: "8.9p1", banner: "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6" }, { port: 80, protocol: "tcp", service: "http", product: "nginx", version: "1.24.0", banner: "HTTP/1.1 200 OK\r\nServer: nginx/1.24.0" }, { port: 443, protocol: "tcp", service: "https", product: "nginx", version: "1.24.0", banner: null }, { port: 5432, protocol: "tcp", service: "postgresql", product: "PostgreSQL", version: null, banner: null }] } },
+    { severity: "info", title: "Port Scan Summary: 12 Open Ports on 10.0.1.10", description: "TCP/UDP port scan discovered 12 open TCP ports and 0 responsive UDP services.", remediation: "Review all open ports and ensure only required services are exposed.", assetId: prodWebAsset?.id, details: { checkModule: "port-scan", target: "10.0.1.10", totalOpen: 12, tcpOpen: 12, udpOpen: 0, ports: [{ port: 22, protocol: "tcp", service: "SSH", category: "remote-access" }, { port: 80, protocol: "tcp", service: "HTTP", category: "web" }, { port: 443, protocol: "tcp", service: "HTTPS", category: "web" }, { port: 3306, protocol: "tcp", service: "MySQL", category: "database" }, { port: 5432, protocol: "tcp", service: "PostgreSQL", category: "database" }, { port: 8080, protocol: "tcp", service: "HTTP-Alt", category: "web" }] } },
+    { severity: "high", title: "Outdated SSH Server Version: OpenSSH 7.6", cveId: "CVE-2023-38408", cvssScore: 7.5, description: "The SSH server is running an outdated version with known security vulnerabilities.", remediation: "Update OpenSSH to version 9.x or later.", assetId: prodApiAsset?.id, details: { checkModule: "service-detection", host: "10.0.2.10", port: 22, product: "OpenSSH", version: "7.6" } },
+    { severity: "info", title: "Cloud Inventory: exg-web-prod-01 — Amazon Web Services", description: "Cloud infrastructure detected. Provider: Amazon Web Services. 2 cloud services identified.", remediation: "Ensure all cloud resources are properly tagged and inventoried.", assetId: prodWebAsset?.id, details: { checkModule: "cloud-inventory", target: "10.0.1.10", provider: "aws", providerName: "Amazon Web Services", services: ["CloudFront CDN", "EC2 Instance"], containers: false, kubernetes: false } },
+    { severity: "high", title: "Database Service Exposed: PostgreSQL on port 5432", cvssScore: 8.1, description: "A database service is network-accessible and revealed its software product via service banner.", remediation: "Restrict database access to application servers only via firewall rules.", assetId: prodDbAsset?.id, details: { checkModule: "service-detection", host: "10.0.3.10", port: 5432, service: "postgresql", product: "PostgreSQL", version: "15.4" } },
+  ];
+
+  for (const findings of [
+    { scanId: scan4.id, items: scan4Findings },
+  ]) {
+    await prisma.scanResult.createMany({
+      data: findings.items.map(f => ({
+        id: uuid(),
+        tenantId: tenant.id,
+        scanId: findings.scanId,
+        severity: f.severity,
+        title: f.title,
+        description: f.description,
+        cveId: ("cveId" in f ? f.cveId : null) as string | null,
+        cvssScore: ("cvssScore" in f ? f.cvssScore : null) as number | null,
+        status: "open",
+        remediation: f.remediation,
+        assetId: f.assetId || null,
+        details: JSON.stringify(f.details),
+      })),
+    });
+  }
+
+  // Phase 8: Enrich existing assets with discovery data
+  if (prodWebAsset) {
+    await prisma.asset.update({
+      where: { id: prodWebAsset.id },
+      data: {
+        os: "Linux (Ubuntu)",
+        discoveryMethod: "scanner",
+        discoveredAt: new Date(Date.now() - 6 * HOUR),
+        manufacturer: "Amazon Web Services",
+        networkRole: "server",
+        openPorts: JSON.stringify([22, 80, 443, 3306, 5432, 8080]),
+        services: JSON.stringify([
+          { port: 22, protocol: "tcp", service: "ssh", product: "OpenSSH", version: "8.9p1" },
+          { port: 80, protocol: "tcp", service: "http", product: "nginx", version: "1.24.0" },
+          { port: 443, protocol: "tcp", service: "https", product: "nginx", version: "1.24.0" },
+          { port: 5432, protocol: "tcp", service: "postgresql", product: "PostgreSQL", version: "15.4" },
+        ]),
+      },
+    });
+  }
+  if (prodApiAsset) {
+    await prisma.asset.update({
+      where: { id: prodApiAsset.id },
+      data: {
+        os: "Linux (Ubuntu)",
+        discoveryMethod: "scanner",
+        discoveredAt: new Date(Date.now() - 6 * HOUR),
+        manufacturer: "Amazon Web Services",
+        networkRole: "server",
+        openPorts: JSON.stringify([22, 80, 443, 3000]),
+        services: JSON.stringify([
+          { port: 22, protocol: "tcp", service: "ssh", product: "OpenSSH", version: "7.6" },
+          { port: 80, protocol: "tcp", service: "http", product: "Express.js", version: null },
+          { port: 443, protocol: "tcp", service: "https", product: "Express.js", version: null },
+          { port: 3000, protocol: "tcp", service: "http", product: "Node.js", version: "18.x" },
+        ]),
+      },
+    });
+  }
+  if (prodDbAsset) {
+    await prisma.asset.update({
+      where: { id: prodDbAsset.id },
+      data: {
+        os: "Linux (Ubuntu)",
+        discoveryMethod: "scanner",
+        discoveredAt: new Date(Date.now() - 6 * HOUR),
+        networkRole: "server",
+        openPorts: JSON.stringify([22, 5432]),
+        services: JSON.stringify([
+          { port: 22, protocol: "tcp", service: "ssh", product: "OpenSSH", version: "8.9p1" },
+          { port: 5432, protocol: "tcp", service: "postgresql", product: "PostgreSQL", version: "15.4" },
+        ]),
+      },
+    });
+  }
+
+  console.log(`   ✅ 4 scans, ${scan1Findings.length + scan2Findings.length + scan3Findings.length + scan4Findings.length} findings seeded\n`);
 
   // ─── 18. Seed SIEM Events & Alerts (Phase 7) ─────────────────────
   console.log("🔔 Seeding SIEM events and alerts...");

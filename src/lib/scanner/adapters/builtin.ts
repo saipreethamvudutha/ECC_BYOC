@@ -1,8 +1,14 @@
 /**
- * Built-in Scanner Adapter
+ * Built-in Scanner Adapter (Enhanced — Phase 8)
  *
  * Uses all check modules with pure TypeScript / Node.js built-ins.
  * Zero external dependencies.
+ *
+ * Phase 8 additions:
+ * - 4 new check modules for enterprise asset discovery
+ * - "discovery" scan type for client's Asset Discovery workflow
+ * - Enhanced port scan (100+ ports with UDP)
+ * - Cloud inventory with AWS/Azure/GCP detection
  */
 
 import { ScannerAdapter, CheckModule } from "../types";
@@ -14,8 +20,13 @@ import { infoDisclosureCheck } from "../checks/info-disclosure";
 import { commonCvesCheck } from "../checks/common-cves";
 import { dnsChecksCheck } from "../checks/dns-checks";
 import { cloudMisconfigCheck } from "../checks/cloud-misconfig";
+// Phase 8: Enterprise Asset Discovery modules
+import { networkDiscoveryCheck } from "../checks/network-discovery";
+import { serviceDetectionCheck } from "../checks/service-detection";
+import { osFingerprintCheck } from "../checks/os-fingerprint";
+import { cloudInventoryCheck } from "../checks/cloud-inventory";
 
-// All available check modules
+// All available check modules (12 total: 8 original + 4 new)
 const ALL_CHECKS: CheckModule[] = [
   httpHeadersCheck,
   sslTlsCheck,
@@ -25,6 +36,11 @@ const ALL_CHECKS: CheckModule[] = [
   commonCvesCheck,
   dnsChecksCheck,
   cloudMisconfigCheck,
+  // Phase 8
+  networkDiscoveryCheck,
+  serviceDetectionCheck,
+  osFingerprintCheck,
+  cloudInventoryCheck,
 ];
 
 // Check modules by scan type
@@ -54,6 +70,20 @@ const CHECKS_BY_TYPE: Record<string, string[]> = {
     "exposed-panels",
     "info-disclosure",
     "common-cves",
+    "dns-checks",
+    "cloud-misconfig",
+    // Phase 8: include discovery modules in full scan
+    "service-detection",
+    "os-fingerprint",
+    "cloud-inventory",
+  ],
+  // Phase 8: Enterprise Asset Discovery scan type
+  discovery: [
+    "network-discovery",
+    "port-scan",
+    "service-detection",
+    "os-fingerprint",
+    "cloud-inventory",
     "dns-checks",
     "cloud-misconfig",
   ],
