@@ -528,6 +528,7 @@ model ComplianceAssessment {
   tenantId    String
   controlId   String
   assessorId  String?
+  assessorType String  @default("manual") // manual, system
   status      String   // compliant, partially_compliant, non_compliant, not_applicable
   findings    String?
   evidence    String   @default("[]") // JSON

@@ -47,9 +47,10 @@ export default function SiemPage() {
   const [severityFilter, setSeverityFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isAutoRefresh = false) => {
+    if (!isAutoRefresh) setLoading(true);
     try {
       const [metricsRes, alertsRes, incRes, rulesRes, eventsRes] = await Promise.all([
         fetch("/api/siem/metrics").then(r => r.ok ? r.json() : null),
@@ -63,11 +64,17 @@ export default function SiemPage() {
       if (incRes?.incidents) setIncidents(incRes.incidents);
       if (rulesRes?.rules) setRules(rulesRes.rules);
       if (eventsRes?.events) setEvents(eventsRes.events);
+      setLastRefresh(new Date());
     } catch (e) { console.error("SIEM load error:", e); }
-    setLoading(false);
+    if (!isAutoRefresh) setLoading(false);
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => loadData(true), 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -124,7 +131,7 @@ export default function SiemPage() {
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <Activity className="w-3 h-3 text-emerald-400 animate-pulse" />
-          Live monitoring
+          <span>Live — updated {formatRelativeTime(lastRefresh.toISOString())}</span>
         </div>
       </div>
 

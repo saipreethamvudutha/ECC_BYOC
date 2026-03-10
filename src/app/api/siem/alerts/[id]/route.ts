@@ -142,6 +142,47 @@ export async function PATCH(
     data,
   });
 
+  // ── Rule tuning feedback loop (Phase 11) ──
+  if (status && updated.ruleId) {
+    try {
+      if (status === "false_positive") {
+        const rule = await prisma.siemRule.findUnique({
+          where: { id: updated.ruleId },
+          select: { truePositiveCount: true, falsePositiveCount: true },
+        });
+        if (rule) {
+          const newFpCount = rule.falsePositiveCount + 1;
+          const total = rule.truePositiveCount + newFpCount;
+          await prisma.siemRule.update({
+            where: { id: updated.ruleId },
+            data: {
+              falsePositiveCount: { increment: 1 },
+              falsePositiveRate: total > 0 ? Math.round((newFpCount / total) * 10000) / 10000 : 0,
+            },
+          });
+        }
+      } else if (["resolved", "closed"].includes(status)) {
+        const rule = await prisma.siemRule.findUnique({
+          where: { id: updated.ruleId },
+          select: { truePositiveCount: true, falsePositiveCount: true },
+        });
+        if (rule) {
+          const newTpCount = rule.truePositiveCount + 1;
+          const total = newTpCount + rule.falsePositiveCount;
+          await prisma.siemRule.update({
+            where: { id: updated.ruleId },
+            data: {
+              truePositiveCount: { increment: 1 },
+              falsePositiveRate: total > 0 ? Math.round((rule.falsePositiveCount / total) * 10000) / 10000 : 0,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Rule tuning feedback error:", err);
+    }
+  }
+
   await createAuditLog({
     tenantId: session.tenantId,
     actorId: session.id,

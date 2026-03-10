@@ -38,11 +38,10 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // Simulate report generation
-  setTimeout(async () => {
-    try {
-      // Gather real data for the report
-      const [assets, scanResults, complianceControls, siemAlerts] = await Promise.all([
+  // ── Phase 11: Synchronous report generation (replaces unreliable setTimeout) ──
+  try {
+    const [assets, scanResults, complianceControls, siemAlerts, scans, incidents] =
+      await Promise.all([
         prisma.asset.count({ where: { tenantId: session.tenantId } }),
         prisma.scanResult.groupBy({
           by: ["severity"],
@@ -57,56 +56,73 @@ export async function POST(request: NextRequest) {
         prisma.siemAlert.count({
           where: { tenantId: session.tenantId, status: { in: ["open", "investigating"] } },
         }),
+        prisma.scan.count({
+          where: { tenantId: session.tenantId },
+        }),
+        prisma.siemIncident.count({
+          where: { tenantId: session.tenantId, status: { notIn: ["closed"] } },
+        }),
       ]);
 
-      const reportData = {
-        generatedAt: new Date().toISOString(),
-        tenant: session.tenantName,
-        summary: {
-          totalAssets: assets,
-          vulnerabilities: Object.fromEntries(
-            scanResults.map((r) => [r.severity, r._count])
-          ),
-          complianceStatus: Object.fromEntries(
-            complianceControls.map((c) => [c.status, c._count])
-          ),
-          openAlerts: siemAlerts,
-        },
-      };
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      tenant: session.tenantName,
+      reportType: type,
+      summary: {
+        totalAssets: assets,
+        totalScans: scans,
+        vulnerabilities: Object.fromEntries(
+          scanResults.map((r) => [r.severity, r._count])
+        ),
+        complianceStatus: Object.fromEntries(
+          complianceControls.map((c) => [c.status, c._count])
+        ),
+        openAlerts: siemAlerts,
+        activeIncidents: incidents,
+      },
+    };
 
-      await prisma.report.update({
-        where: { id: report.id },
-        data: {
-          status: "completed",
-          data: JSON.stringify(reportData),
-        },
-      });
-    } catch (error) {
-      console.error("Report generation error:", error);
-      await prisma.report.update({
-        where: { id: report.id },
-        data: { status: "failed" },
-      });
-    }
-  }, 3000);
+    await prisma.report.update({
+      where: { id: report.id },
+      data: {
+        status: "completed",
+        data: JSON.stringify(reportData),
+      },
+    });
 
-  await createAuditLog({
-    tenantId: session.tenantId,
-    actorId: session.id,
-    actorType: "user",
-    action: "report.generated",
-    resourceType: "report",
-    resourceId: report.id,
-    result: "success",
-    details: { type, name },
-    request,
-  });
+    await createAuditLog({
+      tenantId: session.tenantId,
+      actorId: session.id,
+      actorType: "user",
+      action: "report.generated",
+      resourceType: "report",
+      resourceId: report.id,
+      result: "success",
+      details: { type, name },
+      request,
+    });
 
-  return NextResponse.json({
-    id: report.id,
-    name: report.name,
-    type: report.type,
-    status: report.status,
-    message: "Report generation started",
-  });
+    return NextResponse.json({
+      id: report.id,
+      name: report.name,
+      type: report.type,
+      status: "completed",
+      message: "Report generated successfully",
+    });
+  } catch (error) {
+    console.error("Report generation error:", error);
+
+    await prisma.report.update({
+      where: { id: report.id },
+      data: { status: "failed" },
+    });
+
+    return NextResponse.json({
+      id: report.id,
+      name: report.name,
+      type: report.type,
+      status: "failed",
+      message: "Report generation failed",
+    });
+  }
 }

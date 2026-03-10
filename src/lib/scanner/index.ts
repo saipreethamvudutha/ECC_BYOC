@@ -242,10 +242,50 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
         })),
       });
 
-      // Create SIEM alert for critical findings
+      // Phase 11: Run detection rules against scanner-created events
+      try {
+        const { evaluateRules, createAlertFromMatch } = await import("@/lib/siem/rule-engine");
+        const { findMatchingPlaybooks, executePlaybook } = await import("@/lib/soar/playbooks");
+
+        const activeRules = await prisma.siemRule.findMany({
+          where: { tenantId, isActive: true },
+        });
+
+        // Evaluate each created event against active rules
+        const createdEvents = await prisma.siemEvent.findMany({
+          where: { tenantId, details: { contains: scanId } },
+          orderBy: { createdAt: "desc" },
+          take: criticalHighFindings.length,
+        });
+
+        for (const evt of createdEvents) {
+          const matches = await evaluateRules(evt, activeRules);
+          for (const match of matches) {
+            const alert = await createAlertFromMatch(match, evt, tenantId);
+            // Run SOAR playbooks
+            const pbs = findMatchingPlaybooks(
+              { severity: alert.severity, title: alert.title, mitreAttackId: alert.mitreAttackId },
+              match.ruleName
+            );
+            for (const pb of pbs) {
+              await executePlaybook(alert.id, {
+                tenantId, severity: alert.severity, title: alert.title,
+                mitreAttackId: match.mitreAttackId, mitreTactic: match.mitreTactic,
+                mitreTechnique: match.mitreTechnique,
+              }, pb);
+            }
+          }
+        }
+      } catch (ruleErr) {
+        console.error("Scanner rule evaluation error:", ruleErr);
+      }
+
+      // Fallback: Create basic alerts if no rules matched (backward compatibility)
       const criticalFindings = scan.results.filter((r) => r.severity === "critical");
-      if (criticalFindings.length > 0) {
-        // Check if we have a default alert rule, create one if not
+      const existingAlerts = await prisma.siemAlert.count({
+        where: { tenantId, description: { contains: scanId } },
+      });
+      if (criticalFindings.length > 0 && existingAlerts === 0) {
         let rule = await prisma.siemRule.findFirst({
           where: { tenantId, name: "Critical Vulnerability Detected" },
         });
@@ -258,7 +298,6 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
               severity: "critical",
               condition: JSON.stringify({ severity: "critical", source: "scanner" }),
               isActive: true,
-              // Phase 10: MITRE ATT&CK enrichment
               ruleType: "correlation",
               category: "vulnerability",
               dataSources: JSON.stringify(["scanner"]),
@@ -275,7 +314,6 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
             title: `Critical: ${f.title}`,
             description: f.description || `Critical vulnerability found during scan "${scan.name}"`,
             status: "open",
-            // Phase 10: Scoring & context enrichment
             confidenceScore: 90,
             priorityScore: 90,
             assetCriticalityWeight: targetAsset?.criticality || null,
@@ -409,7 +447,15 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
       }
     }
 
-    // 3. Create AI action suggestions for critical findings
+    // 3. Compliance automation — map scan findings to compliance controls (Phase 11)
+    try {
+      const { updateComplianceFromScan } = await import("@/lib/compliance/automation");
+      await updateComplianceFromScan(scanId, tenantId);
+    } catch (compError) {
+      console.error("Compliance automation error:", compError);
+    }
+
+    // 4. Create AI action suggestions for critical findings
     const criticals = scan.results.filter((r) => r.severity === "critical");
     if (criticals.length > 0) {
       await prisma.aiAction.createMany({
