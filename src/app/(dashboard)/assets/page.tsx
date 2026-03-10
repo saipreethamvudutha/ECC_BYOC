@@ -40,6 +40,7 @@ interface AssetItem {
   status: string;
   tags: string[];
   assetTags: AssetTag[];
+  assetOwner: string | null;
   group: { id: string; name: string } | null;
   lastScanAt: string | null;
   createdAt: string;
@@ -278,13 +279,14 @@ export default function AssetsPage() {
         </CardHeader>
         <CardContent>
           {/* Table Header */}
-          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
+          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-2">
             <span>Name</span>
             <span>Type</span>
             <span>IP / Hostname</span>
             <span>OS</span>
             <span>Criticality</span>
             <span>Tags</span>
+            <span>Owner</span>
             <span>Group</span>
             <span>Status</span>
           </div>
@@ -295,7 +297,7 @@ export default function AssetsPage() {
                 <div
                   key={asset.id}
                   onClick={() => router.push(`/assets/${asset.id}`)}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center p-4 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all cursor-pointer border border-transparent hover:border-slate-700"
                 >
                   {/* Name */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -358,6 +360,13 @@ export default function AssetsPage() {
                     ) : (
                       <span className="text-sm text-slate-500">-</span>
                     )}
+                  </div>
+
+                  {/* Owner */}
+                  <div>
+                    <p className="text-sm text-slate-400 truncate">
+                      {asset.assetOwner || "—"}
+                    </p>
                   </div>
 
                   {/* Group */}

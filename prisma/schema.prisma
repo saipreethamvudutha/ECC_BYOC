@@ -408,6 +408,15 @@ model Asset {
   discoveryMethod String?  // scanner, manual, cloud_api, agent, cmdb_sync
   discoveredAt    DateTime? // When asset was first discovered by scanner
   ttl             Int?     // TTL value from network probe (for OS fingerprinting)
+  // ── Phase 9: Asset Inventory Fields (Client Step 2) ──
+  serialNumber      String?  // Hardware serial number (e.g., "SN-2024-WEB-0847")
+  biosUuid          String?  // BIOS/UEFI UUID for physical host identification
+  physicalLocation  String?  // Data center / rack / office (e.g., "DC-Mumbai-R12-U24")
+  assetOwner        String?  // Team or individual responsible (e.g., "Platform Engineering")
+  subnet            String?  // Network subnet (e.g., "10.0.1.0/24")
+  vlan              String?  // VLAN ID (e.g., "VLAN-100")
+  installedSoftware String   @default("[]") // JSON: [{name, version, vendor, installedAt}]
+  userAccounts      String   @default("[]") // JSON: [{username, role, lastLogin, status}]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

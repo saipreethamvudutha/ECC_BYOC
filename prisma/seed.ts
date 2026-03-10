@@ -992,6 +992,7 @@ async function main() {
   const prodApiAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-api-prod-01" } });
   const prodDbAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-db-prod-01" } });
   const stagingAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-web-staging-01" } });
+  const firewallAsset = await prisma.asset.findFirst({ where: { tenantId: tenant.id, name: "exg-fw-prod-01" } });
 
   const scan1 = await prisma.scan.create({
     data: {
@@ -1190,6 +1191,99 @@ async function main() {
         services: JSON.stringify([
           { port: 22, protocol: "tcp", service: "ssh", product: "OpenSSH", version: "8.9p1" },
           { port: 5432, protocol: "tcp", service: "postgresql", product: "PostgreSQL", version: "15.4" },
+        ]),
+      },
+    });
+  }
+
+  // Phase 9: Enrich assets with inventory fields (Client Step 2)
+  if (prodWebAsset) {
+    await prisma.asset.update({
+      where: { id: prodWebAsset.id },
+      data: {
+        serialNumber: "SN-2024-WEB-0847",
+        biosUuid: "4c4c4544-0034-4810-8057-b7c04f575231",
+        physicalLocation: "DC-Mumbai-R12-U24",
+        assetOwner: "Platform Engineering",
+        subnet: "10.0.1.0/24",
+        vlan: "VLAN-100",
+        installedSoftware: JSON.stringify([
+          { name: "nginx", version: "1.24.0", vendor: "F5 / Nginx Inc", installedAt: "2024-08-15T10:00:00Z" },
+          { name: "Node.js", version: "20.11.0", vendor: "OpenJS Foundation", installedAt: "2024-09-01T14:30:00Z" },
+          { name: "OpenSSH", version: "8.9p1", vendor: "OpenBSD Project", installedAt: "2024-06-20T09:00:00Z" },
+          { name: "PostgreSQL Client", version: "15.4", vendor: "PostgreSQL Global Dev Group", installedAt: "2024-07-10T11:00:00Z" },
+        ]),
+        userAccounts: JSON.stringify([
+          { username: "deploy-svc", role: "service", lastLogin: "2026-03-08T22:15:00Z", status: "active" },
+          { username: "www-data", role: "service", lastLogin: null, status: "active" },
+          { username: "admin-ops", role: "admin", lastLogin: "2026-03-07T14:30:00Z", status: "active" },
+        ]),
+      },
+    });
+  }
+  if (prodApiAsset) {
+    await prisma.asset.update({
+      where: { id: prodApiAsset.id },
+      data: {
+        serialNumber: "SN-2024-API-1293",
+        biosUuid: "4c4c4544-0034-4810-8057-b7c04f575232",
+        physicalLocation: "DC-Mumbai-R12-U26",
+        assetOwner: "Platform Engineering",
+        subnet: "10.0.1.0/24",
+        vlan: "VLAN-100",
+        installedSoftware: JSON.stringify([
+          { name: "Node.js", version: "20.11.0", vendor: "OpenJS Foundation", installedAt: "2024-09-01T14:30:00Z" },
+          { name: "PM2", version: "5.3.1", vendor: "Keymetrics", installedAt: "2024-09-02T10:00:00Z" },
+          { name: "OpenSSH", version: "7.6p1", vendor: "OpenBSD Project", installedAt: "2023-01-15T09:00:00Z" },
+        ]),
+        userAccounts: JSON.stringify([
+          { username: "deploy-svc", role: "service", lastLogin: "2026-03-08T22:15:00Z", status: "active" },
+          { username: "node-app", role: "service", lastLogin: null, status: "active" },
+          { username: "admin-ops", role: "admin", lastLogin: "2026-03-07T10:00:00Z", status: "active" },
+        ]),
+      },
+    });
+  }
+  if (prodDbAsset) {
+    await prisma.asset.update({
+      where: { id: prodDbAsset.id },
+      data: {
+        serialNumber: "SN-2024-DB-0562",
+        biosUuid: "4c4c4544-0034-4810-8057-b7c04f575233",
+        physicalLocation: "DC-Mumbai-R14-U08",
+        assetOwner: "Database Operations",
+        subnet: "10.0.2.0/24",
+        vlan: "VLAN-200",
+        installedSoftware: JSON.stringify([
+          { name: "PostgreSQL", version: "15.4", vendor: "PostgreSQL Global Dev Group", installedAt: "2024-07-10T11:00:00Z" },
+          { name: "pgBouncer", version: "1.21.0", vendor: "PgBouncer Contributors", installedAt: "2024-08-01T09:00:00Z" },
+          { name: "OpenSSH", version: "8.9p1", vendor: "OpenBSD Project", installedAt: "2024-06-20T09:00:00Z" },
+        ]),
+        userAccounts: JSON.stringify([
+          { username: "postgres", role: "admin", lastLogin: "2026-03-09T01:00:00Z", status: "active" },
+          { username: "replicator", role: "replication", lastLogin: "2026-03-09T00:00:00Z", status: "active" },
+          { username: "app_readonly", role: "readonly", lastLogin: "2026-03-08T23:45:00Z", status: "active" },
+          { username: "backup-svc", role: "backup", lastLogin: "2026-03-09T02:00:00Z", status: "active" },
+        ]),
+      },
+    });
+  }
+  if (firewallAsset) {
+    await prisma.asset.update({
+      where: { id: firewallAsset.id },
+      data: {
+        serialNumber: "SN-2024-FW-0100",
+        physicalLocation: "DC-Mumbai-R01-U01",
+        assetOwner: "Network Operations",
+        subnet: "10.0.0.0/24",
+        vlan: "VLAN-1",
+        installedSoftware: JSON.stringify([
+          { name: "PAN-OS", version: "11.1.2", vendor: "Palo Alto Networks", installedAt: "2024-10-15T08:00:00Z" },
+        ]),
+        userAccounts: JSON.stringify([
+          { username: "admin", role: "admin", lastLogin: "2026-03-08T16:00:00Z", status: "active" },
+          { username: "readonly-audit", role: "readonly", lastLogin: "2026-03-07T09:00:00Z", status: "active" },
+          { username: "legacy-admin", role: "admin", lastLogin: "2025-11-01T10:00:00Z", status: "disabled" },
         ]),
       },
     });

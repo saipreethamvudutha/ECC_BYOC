@@ -69,6 +69,7 @@ test.describe("Asset Management Tests", () => {
       "OS",
       "Criticality",
       "Tags",
+      "Owner",
       "Group",
       "Status",
     ];
@@ -466,5 +467,207 @@ test.describe("Asset Management Tests", () => {
     // Verify IP addresses are displayed in the table
     await expect(page.locator("text=10.0.1.10").first()).toBeVisible();
     await expect(page.locator("text=10.0.3.10").first()).toBeVisible();
+  });
+
+  // =========================================================================
+  // Phase 9: Asset Inventory Enhancement Tests (TC-ASSET-004 to TC-ASSET-008)
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // TC-ASSET-004: Asset detail shows inventory fields
+  // -------------------------------------------------------------------------
+  test("TC-ASSET-004: Asset detail page shows inventory fields (serial, location, owner, subnet)", async ({
+    page,
+  }) => {
+    await navigateTo(page, "/assets");
+
+    await expect(
+      page.locator("h1:has-text('Asset Inventory')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Wait for assets to load and click on exg-web-prod-01
+    await expect(
+      page.locator("text=exg-web-prod-01").first()
+    ).toBeVisible({ timeout: 10000 });
+    await page.locator("text=exg-web-prod-01").first().click();
+
+    // Wait for the detail page to load
+    await expect(
+      page.locator("h1:has-text('exg-web-prod-01')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Verify Inventory Details card is shown
+    await expect(
+      page.locator("text=Inventory Details")
+    ).toBeVisible({ timeout: 10000 });
+
+    // Verify inventory field labels and values
+    await expect(page.locator("text=Serial Number")).toBeVisible();
+    await expect(page.locator("text=SN-2024-WEB-0847")).toBeVisible();
+
+    await expect(page.locator("text=Physical Location")).toBeVisible();
+    await expect(page.locator("text=DC-Mumbai-R12-U24")).toBeVisible();
+
+    await expect(page.locator("text=Asset Owner")).toBeVisible();
+    await expect(page.locator("text=Platform Engineering").first()).toBeVisible();
+
+    await expect(page.locator("text=Subnet")).toBeVisible();
+    await expect(page.locator("text=10.0.1.0/24")).toBeVisible();
+
+    await expect(page.locator("text=VLAN").first()).toBeVisible();
+    await expect(page.locator("text=VLAN-100")).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-ASSET-005: Asset list shows owner column
+  // -------------------------------------------------------------------------
+  test("TC-ASSET-005: Asset list shows Owner column with enriched values", async ({
+    page,
+  }) => {
+    await navigateTo(page, "/assets");
+
+    await expect(
+      page.locator("h1:has-text('Asset Inventory')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Wait for assets to load
+    await expect(
+      page.locator("text=exg-web-prod-01").first()
+    ).toBeVisible({ timeout: 10000 });
+
+    // Verify Owner column header
+    await expect(page.locator("text=Owner").first()).toBeVisible();
+
+    // Verify owner values are shown for enriched assets
+    await expect(
+      page.locator("text=Platform Engineering").first()
+    ).toBeVisible();
+    await expect(
+      page.locator("text=Database Operations").first()
+    ).toBeVisible();
+    await expect(
+      page.locator("text=Network Operations").first()
+    ).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-ASSET-006: PATCH asset updates inventory fields via API
+  // -------------------------------------------------------------------------
+  test("TC-ASSET-006: PATCH asset API updates inventory fields", async ({
+    page,
+  }) => {
+    // First get the list of assets to find exg-web-prod-01's ID
+    const listResponse = await apiCall(page, "GET", "/api/assets");
+    expect(listResponse.status).toBe(200);
+    const assets = listResponse.data as { id: string; name: string }[];
+    const webAsset = assets.find((a) => a.name === "exg-web-prod-01");
+    expect(webAsset).toBeTruthy();
+
+    // PATCH to update inventory fields
+    const patchResponse = await apiCall(page, "PATCH", `/api/assets/${webAsset!.id}`, {
+      physicalLocation: "DC-Mumbai-R12-U25",
+      assetOwner: "SRE Team",
+    });
+
+    expect(patchResponse.status).toBe(200);
+    const updated = patchResponse.data as Record<string, unknown>;
+    expect(updated.physicalLocation).toBe("DC-Mumbai-R12-U25");
+    expect(updated.assetOwner).toBe("SRE Team");
+
+    // Verify via GET detail API
+    const detailResponse = await apiCall(page, "GET", `/api/assets/${webAsset!.id}`);
+    expect(detailResponse.status).toBe(200);
+    const detail = detailResponse.data as Record<string, unknown>;
+    expect(detail.physicalLocation).toBe("DC-Mumbai-R12-U25");
+    expect(detail.assetOwner).toBe("SRE Team");
+    expect(detail.serialNumber).toBe("SN-2024-WEB-0847"); // unchanged
+
+    // Restore original values
+    await apiCall(page, "PATCH", `/api/assets/${webAsset!.id}`, {
+      physicalLocation: "DC-Mumbai-R12-U24",
+      assetOwner: "Platform Engineering",
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-ASSET-007: Installed software table renders
+  // -------------------------------------------------------------------------
+  test("TC-ASSET-007: Asset detail shows installed software table", async ({
+    page,
+  }) => {
+    await navigateTo(page, "/assets");
+
+    await expect(
+      page.locator("h1:has-text('Asset Inventory')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click on exg-web-prod-01 (has installed software)
+    await expect(
+      page.locator("text=exg-web-prod-01").first()
+    ).toBeVisible({ timeout: 10000 });
+    await page.locator("text=exg-web-prod-01").first().click();
+
+    // Wait for detail page
+    await expect(
+      page.locator("h1:has-text('exg-web-prod-01')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Verify Installed Software card
+    await expect(
+      page.locator("text=Installed Software").first()
+    ).toBeVisible({ timeout: 10000 });
+
+    // Verify table headers
+    await expect(page.locator("th:has-text('Name')").nth(1)).toBeVisible();
+    await expect(page.locator("th:has-text('Version')").first()).toBeVisible();
+    await expect(page.locator("th:has-text('Vendor')").first()).toBeVisible();
+
+    // Verify software entries from seed data
+    await expect(page.locator("text=nginx").first()).toBeVisible();
+    await expect(page.locator("text=1.24.0").first()).toBeVisible();
+    await expect(page.locator("text=Node.js").first()).toBeVisible();
+    await expect(page.locator("text=OpenSSH").first()).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-ASSET-008: User accounts table renders with status badges
+  // -------------------------------------------------------------------------
+  test("TC-ASSET-008: Asset detail shows user accounts table with status badges", async ({
+    page,
+  }) => {
+    await navigateTo(page, "/assets");
+
+    await expect(
+      page.locator("h1:has-text('Asset Inventory')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click on exg-fw-prod-01 (firewall with disabled account for testing)
+    await expect(
+      page.locator("text=exg-fw-prod-01").first()
+    ).toBeVisible({ timeout: 10000 });
+    await page.locator("text=exg-fw-prod-01").first().click();
+
+    // Wait for detail page
+    await expect(
+      page.locator("h1:has-text('exg-fw-prod-01')")
+    ).toBeVisible({ timeout: 15000 });
+
+    // Verify User Accounts card
+    await expect(
+      page.locator("text=User Accounts").first()
+    ).toBeVisible({ timeout: 10000 });
+
+    // Verify table headers
+    await expect(page.locator("th:has-text('Username')").first()).toBeVisible();
+    await expect(page.locator("th:has-text('Role')").first()).toBeVisible();
+    await expect(page.locator("th:has-text('Status')").first()).toBeVisible();
+
+    // Verify account entries from seed data
+    await expect(page.locator("td:has-text('admin')").first()).toBeVisible();
+    await expect(page.locator("td:has-text('readonly-audit')").first()).toBeVisible();
+
+    // Verify status badges - active and disabled accounts
+    await expect(page.locator("text=active").first()).toBeVisible();
+    await expect(page.locator("text=disabled").first()).toBeVisible();
   });
 });

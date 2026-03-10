@@ -85,6 +85,7 @@ export async function GET() {
         color: at.tag.color,
       })),
       group: a.group ? { id: a.group.id, name: a.group.name } : null,
+      assetOwner: a.assetOwner,
       lastScanAt: a.lastScanAt?.toISOString() || null,
       createdAt: a.createdAt.toISOString(),
     }))

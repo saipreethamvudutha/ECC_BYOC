@@ -50,6 +50,15 @@ interface AssetDetail {
   openPorts: number[];
   discoveryMethod: string | null;
   discoveredAt: string | null;
+  // Phase 9: Inventory fields
+  serialNumber: string | null;
+  biosUuid: string | null;
+  physicalLocation: string | null;
+  assetOwner: string | null;
+  subnet: string | null;
+  vlan: string | null;
+  installedSoftware: { name: string; version: string; vendor?: string; installedAt?: string }[];
+  userAccounts: { username: string; role: string; lastLogin?: string; status: string }[];
   findings: {
     id: string;
     severity: string;
@@ -312,6 +321,133 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Inventory Details (Phase 9) */}
+          {(asset.serialNumber || asset.biosUuid || asset.physicalLocation || asset.assetOwner || asset.subnet || asset.vlan) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Inventory Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  {asset.serialNumber && (
+                    <div>
+                      <p className="text-slate-500">Serial Number</p>
+                      <p className="text-white mt-1 font-mono">{asset.serialNumber}</p>
+                    </div>
+                  )}
+                  {asset.biosUuid && (
+                    <div>
+                      <p className="text-slate-500">BIOS UUID</p>
+                      <p className="text-white mt-1 font-mono text-xs">{asset.biosUuid}</p>
+                    </div>
+                  )}
+                  {asset.physicalLocation && (
+                    <div>
+                      <p className="text-slate-500">Physical Location</p>
+                      <p className="text-white mt-1">{asset.physicalLocation}</p>
+                    </div>
+                  )}
+                  {asset.assetOwner && (
+                    <div>
+                      <p className="text-slate-500">Asset Owner</p>
+                      <p className="text-white mt-1">{asset.assetOwner}</p>
+                    </div>
+                  )}
+                  {asset.subnet && (
+                    <div>
+                      <p className="text-slate-500">Subnet</p>
+                      <p className="text-white mt-1 font-mono">{asset.subnet}</p>
+                    </div>
+                  )}
+                  {asset.vlan && (
+                    <div>
+                      <p className="text-slate-500">VLAN</p>
+                      <p className="text-white mt-1 font-mono">{asset.vlan}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Installed Software (Phase 9) */}
+          {asset.installedSoftware.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Installed Software ({asset.installedSoftware.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="border border-slate-800 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-800/50">
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Name</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Version</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Vendor</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Installed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {asset.installedSoftware.map((sw, idx) => (
+                        <tr key={idx} className="border-t border-slate-800/50">
+                          <td className="px-3 py-2 text-white">{sw.name}</td>
+                          <td className="px-3 py-2 text-cyan-400 font-mono text-xs">{sw.version}</td>
+                          <td className="px-3 py-2 text-slate-300">{sw.vendor || "—"}</td>
+                          <td className="px-3 py-2 text-slate-300 text-xs">{sw.installedAt ? formatDateTime(sw.installedAt) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* User Accounts (Phase 9) */}
+          {asset.userAccounts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">User Accounts ({asset.userAccounts.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="border border-slate-800 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-800/50">
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Username</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Role</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Last Login</th>
+                        <th className="px-3 py-2 text-left text-slate-400 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {asset.userAccounts.map((acc, idx) => (
+                        <tr key={idx} className="border-t border-slate-800/50">
+                          <td className="px-3 py-2 text-white font-mono">{acc.username}</td>
+                          <td className="px-3 py-2 text-slate-300 capitalize">{acc.role}</td>
+                          <td className="px-3 py-2 text-slate-300 text-xs">{acc.lastLogin ? formatDateTime(acc.lastLogin) : "—"}</td>
+                          <td className="px-3 py-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px]",
+                                acc.status === "active" ? "text-emerald-400 border-emerald-500/30" :
+                                acc.status === "disabled" ? "text-yellow-400 border-yellow-500/30" :
+                                "text-red-400 border-red-500/30"
+                              )}
+                            >
+                              {acc.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           )}

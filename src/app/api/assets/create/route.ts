@@ -18,7 +18,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
-  const { name, type, ipAddress, hostname, os, criticality, groupId } = await request.json();
+  const {
+    name, type, ipAddress, hostname, os, criticality, groupId,
+    macAddress, manufacturer, model, firmware, networkRole,
+    serialNumber, biosUuid, physicalLocation, assetOwner, subnet, vlan,
+    installedSoftware, userAccounts,
+  } = await request.json();
 
   if (!name || !type) {
     return NextResponse.json(
@@ -37,6 +42,19 @@ export async function POST(request: NextRequest) {
       os: os || null,
       criticality: criticality || "medium",
       groupId: groupId || null,
+      macAddress: macAddress || null,
+      manufacturer: manufacturer || null,
+      model: model || null,
+      firmware: firmware || null,
+      networkRole: networkRole || null,
+      serialNumber: serialNumber || null,
+      biosUuid: biosUuid || null,
+      physicalLocation: physicalLocation || null,
+      assetOwner: assetOwner || null,
+      subnet: subnet || null,
+      vlan: vlan || null,
+      installedSoftware: installedSoftware ? (typeof installedSoftware === "string" ? installedSoftware : JSON.stringify(installedSoftware)) : "[]",
+      userAccounts: userAccounts ? (typeof userAccounts === "string" ? userAccounts : JSON.stringify(userAccounts)) : "[]",
     },
     include: { group: true },
   });

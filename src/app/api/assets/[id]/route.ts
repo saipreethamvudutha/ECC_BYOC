@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET(
   _request: NextRequest,
@@ -89,6 +90,15 @@ export async function GET(
     openPorts: safeParse(asset.openPorts),
     discoveryMethod: asset.discoveryMethod,
     discoveredAt: asset.discoveredAt?.toISOString() || null,
+    // Phase 9: Inventory fields
+    serialNumber: asset.serialNumber,
+    biosUuid: asset.biosUuid,
+    physicalLocation: asset.physicalLocation,
+    assetOwner: asset.assetOwner,
+    subnet: asset.subnet,
+    vlan: asset.vlan,
+    installedSoftware: safeParse(asset.installedSoftware),
+    userAccounts: safeParse(asset.userAccounts),
     findings: asset.scanResults.map((r) => ({
       id: r.id,
       severity: r.severity,
@@ -103,4 +113,104 @@ export async function GET(
       createdAt: r.createdAt.toISOString(),
     })),
   });
+}
+
+// ── PATCH: Update asset fields ──────────────────────────────────────
+const ALLOWED_FIELDS = new Set([
+  "name", "type", "ipAddress", "hostname", "os", "criticality", "status",
+  "groupId", "macAddress", "manufacturer", "model", "firmware", "networkRole",
+  "serialNumber", "biosUuid", "physicalLocation", "assetOwner", "subnet", "vlan",
+  "installedSoftware", "userAccounts", "services", "openPorts",
+]);
+
+const JSON_FIELDS = new Set(["installedSoftware", "userAccounts", "services", "openPorts"]);
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const canEdit = await rbac.checkCapability(session.id, session.tenantId, "asset.edit");
+  if (!canEdit) {
+    return NextResponse.json({ error: "Forbidden: requires asset.edit capability" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const body = await request.json();
+
+  // Build update data from allowlisted fields only
+  const updateData: Record<string, unknown> = {};
+  const changedFields: string[] = [];
+
+  for (const [key, value] of Object.entries(body)) {
+    if (!ALLOWED_FIELDS.has(key)) continue;
+
+    if (JSON_FIELDS.has(key)) {
+      // Validate JSON array fields
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          if (!Array.isArray(parsed)) {
+            return NextResponse.json(
+              { error: `${key} must be a JSON array` },
+              { status: 400 }
+            );
+          }
+          updateData[key] = value;
+        } catch {
+          return NextResponse.json(
+            { error: `${key} must be valid JSON` },
+            { status: 400 }
+          );
+        }
+      } else if (Array.isArray(value)) {
+        updateData[key] = JSON.stringify(value);
+      } else {
+        return NextResponse.json(
+          { error: `${key} must be a JSON array or stringified array` },
+          { status: 400 }
+        );
+      }
+    } else {
+      updateData[key] = value ?? null;
+    }
+    changedFields.push(key);
+  }
+
+  if (changedFields.length === 0) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
+  // Verify asset exists and belongs to this tenant
+  const existing = await prisma.asset.findFirst({
+    where: { id, tenantId: session.tenantId },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.asset.update({
+    where: { id },
+    data: updateData,
+    include: { group: true },
+  });
+
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "asset.updated",
+    resourceType: "asset",
+    resourceId: id,
+    result: "success",
+    details: { changedFields, updates: updateData },
+    request,
+  });
+
+  return NextResponse.json(updated);
 }
