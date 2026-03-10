@@ -489,24 +489,30 @@ test.describe("Phase 7: Scanner Engine & Downstream Integration", () => {
     test("TC-DOWNSTREAM-002: SIEM events include scanner-generated entries", async ({ page }) => {
       await loginAsAdmin(page);
 
-      const siemResult = await apiCall(page, "GET", "/api/siem");
-      expect(siemResult.status).toBe(200);
+      // Events tab (default)
+      const eventsResult = await apiCall(page, "GET", "/api/siem?tab=events&limit=100");
+      expect(eventsResult.status).toBe(200);
 
-      const siemData = siemResult.data as {
+      const eventsData = eventsResult.data as {
         events: Array<{ title: string; source: string; severity: string }>;
-        alerts: Array<{ title: string; severity: string; status: string }>;
       };
 
       // Should have scanner events
-      const scannerEvents = siemData.events.filter((e) => e.source === "scanner");
+      const scannerEvents = eventsData.events.filter((e) => e.source === "scanner");
       expect(scannerEvents.length).toBeGreaterThanOrEqual(3);
 
       // Should have critical scanner events
       const criticalScannerEvents = scannerEvents.filter((e) => e.severity === "critical");
       expect(criticalScannerEvents.length).toBeGreaterThanOrEqual(2);
 
-      // Should have SIEM alerts
-      expect(siemData.alerts.length).toBeGreaterThanOrEqual(3);
+      // Check alerts separately
+      const alertsResult = await apiCall(page, "GET", "/api/siem?tab=alerts&limit=50");
+      expect(alertsResult.status).toBe(200);
+
+      const alertsData = alertsResult.data as {
+        alerts: Array<{ title: string; severity: string; status: string }>;
+      };
+      expect(alertsData.alerts.length).toBeGreaterThanOrEqual(3);
     });
 
     test("TC-DOWNSTREAM-003: AI Actions page shows scanner remediation suggestions", async ({ page }) => {

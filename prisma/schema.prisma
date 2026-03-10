@@ -28,9 +28,10 @@ model Tenant {
   complianceFrameworks ComplianceFramework[]
   complianceControls   ComplianceControl[]
   complianceAssessments ComplianceAssessment[]
-  siemEvents  SiemEvent[]
-  siemAlerts  SiemAlert[]
-  siemRules   SiemRule[]
+  siemEvents    SiemEvent[]
+  siemAlerts    SiemAlert[]
+  siemRules     SiemRule[]
+  siemIncidents SiemIncident[]
   aiActions   AiAction[]
   reports     Report[]
   assetGroups AssetGroup[]
@@ -542,28 +543,69 @@ model ComplianceAssessment {
   @@map("compliance_assessments")
 }
 
-// ─── SIEM ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// SIEM / SOC — Phase 10: Enterprise SIEM Enhancement
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── SIEM EVENTS (ECS-Normalized) ───────────────────────────────
 model SiemEvent {
   id        String   @id @default(uuid())
   tenantId  String
-  source    String   // firewall, ids, endpoint, cloud, application
+
+  // ── Core fields ──
+  source    String   // firewall, ids, endpoint, cloud, application, edr, waf, identity, database, dns, scanner
   severity  String   // critical, high, medium, low, info
-  category  String   // authentication, network, malware, policy_violation, system
+  category  String   // authentication, network, malware, policy_violation, system, process, dns, cloud_iam, data_exfil, lateral_movement, ransomware
   title     String
-  details   String   @default("{}") // JSON
-  sourceIp  String?
-  destIp    String?
-  userId    String?
-  raw       String?  // raw log data
+  details   String   @default("{}") // JSON — full ECS-normalized payload
+
+  // ── Network fields (ECS) ──
+  sourceIp    String?
+  sourcePort  Int?
+  destIp      String?
+  destPort    Int?
+  protocol    String?  // tcp, udp, icmp, http, https, dns
+  direction   String?  // inbound, outbound, internal
+
+  // ── Identity/Auth fields (ECS) ──
+  userId       String?
+  userName     String?
+  userDomain   String?
+  eventOutcome String? // success, failure
+  eventAction  String? // login, logout, mfa_verify, privilege_escalation, account_created
+
+  // ── Process fields (ECS) ──
+  processName       String?
+  processPid        Int?
+  processParentName String?
+  processExecutable String?
+  hostName          String?
+  hostIp            String?
+
+  // ── Enrichment fields ──
+  geoCountry       String?  // ISO country code
+  geoCity          String?
+  threatIntelHit   Boolean  @default(false)
+  assetCriticality String?  // critical, high, medium, low
+
+  // ── Metadata ──
+  dataset  String?  // e.g., "auth.login", "network.flow", "process.start"
+  module   String?  // e.g., "palo_alto", "crowdstrike", "aws_cloudtrail"
+  logLevel String?  // debug, info, warning, error, critical
+  raw      String?  // raw log line
+
   createdAt DateTime @default(now())
 
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   alerts SiemAlert[]
 
   @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, category])
+  @@index([tenantId, severity])
   @@map("siem_events")
 }
 
+// ─── SIEM ALERTS (with Triage, MITRE ATT&CK, Scoring) ──────────
 model SiemAlert {
   id           String    @id @default(uuid())
   tenantId     String
@@ -572,29 +614,79 @@ model SiemAlert {
   severity     String    // critical, high, medium, low
   title        String
   description  String?
-  status       String    @default("open")
-  assignedTo   String?
+
+  // ── Full lifecycle ──
+  status         String    @default("open") // open, triaging, investigating, contained, resolved, closed, false_positive
+  assignedTo     String?
+  assignedToName String?
+
+  // ── MITRE ATT&CK ──
+  mitreAttackId  String?  // e.g., "T1110"
+  mitreTactic    String?  // e.g., "Credential Access"
+  mitreTechnique String?  // e.g., "Brute Force / Password Spray"
+
+  // ── Scoring ──
+  confidenceScore        Int?    // 0-100
+  assetCriticalityWeight String? // from impacted asset
+  priorityScore          Int?    // computed: severity * confidence * criticality
+
+  // ── Case link ──
+  incidentId String?
+
+  // ── Investigation context ──
+  impactedUsers   String  @default("[]") // JSON array
+  impactedAssets  String  @default("[]") // JSON array
+  relatedAlertIds String  @default("[]") // JSON array
+  threatIntel     String  @default("{}") // JSON: { iocType, iocValue, source }
+
+  // ── Timestamps ──
   acknowledgedAt DateTime?
-  resolvedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  containedAt    DateTime?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  rule   SiemRule?  @relation(fields: [ruleId], references: [id])
-  event  SiemEvent? @relation(fields: [eventId], references: [id])
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rule     SiemRule?     @relation(fields: [ruleId], references: [id])
+  event    SiemEvent?    @relation(fields: [eventId], references: [id])
+  incident SiemIncident? @relation(fields: [incidentId], references: [id])
 
-  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, severity])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([incidentId])
   @@map("siem_alerts")
 }
 
+// ─── SIEM RULES (with MITRE ATT&CK & Tuning) ───────────────────
 model SiemRule {
   id          String   @id @default(uuid())
   tenantId    String
   name        String
   description String?
+
+  // ── Detection engine ──
+  ruleType    String   @default("correlation") // correlation, behavioral, threat_intel, anomaly
   condition   String   @default("{}") // JSON rule definition
   severity    String   @default("medium")
   isActive    Boolean  @default(true)
+
+  // ── MITRE ATT&CK mapping ──
+  mitreAttackId  String?  // e.g., "T1110"
+  mitreTactic    String?  // e.g., "Credential Access"
+  mitreTechnique String?  // e.g., "Brute Force / Password Spray"
+
+  // ── Rule tuning ──
+  confidenceLevel    Int       @default(75) // 0-100
+  falsePositiveRate  Float     @default(0)
+  truePositiveCount  Int       @default(0)
+  falsePositiveCount Int       @default(0)
+  lastTriggeredAt    DateTime?
+
+  // ── Operational ──
+  category    String?  // authentication, network, malware, process, cloud, data_exfil
+  dataSources String   @default("[]") // JSON: ["endpoint", "firewall", "cloud"]
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -603,7 +695,62 @@ model SiemRule {
   alerts SiemAlert[]
 
   @@index([tenantId])
+  @@index([tenantId, isActive])
   @@map("siem_rules")
+}
+
+// ─── SIEM INCIDENTS (Case Management) ───────────────────────────
+model SiemIncident {
+  id          String   @id @default(uuid())
+  tenantId    String
+
+  // ── Core fields ──
+  title       String
+  description String?
+  severity    String   // critical, high, medium, low
+  status      String   @default("open") // open, investigating, contained, eradicated, recovered, closed
+  priority    String   @default("medium") // critical, high, medium, low
+
+  // ── Assignment ──
+  assignedTo      String?
+  assignedToName  String?
+  escalatedBy     String?
+  escalatedByName String?
+
+  // ── Impact & Analysis ──
+  impactSummary    String?
+  impactedUsers    String  @default("[]") // JSON array
+  impactedAssets   String  @default("[]") // JSON array
+  rootCause        String?
+  remediationSteps String  @default("[]") // JSON: [{step, status, assignee, completedAt}]
+
+  // ── Timeline & Evidence ──
+  timeline    String  @default("[]") // JSON: [{timestamp, action, actor, details}]
+  evidence    String  @default("[]") // JSON: [{type, name, addedAt, addedBy}]
+
+  // ── MITRE ATT&CK ──
+  mitreTactics    String  @default("[]") // JSON array
+  mitreTechniques String  @default("[]") // JSON array
+
+  // ── Compliance & SLA ──
+  complianceMapping String  @default("[]") // JSON: [{framework, control}]
+  slaBreached       Boolean @default(false)
+
+  // ── Timestamps ──
+  detectedAt     DateTime
+  acknowledgedAt DateTime?
+  containedAt    DateTime?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alerts SiemAlert[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("siem_incidents")
 }
 
 // ─── AI ACTIONS ──────────────────────────────────────────────────

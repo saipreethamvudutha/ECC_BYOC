@@ -84,19 +84,19 @@ test.describe.serial("Role Management", () => {
     const builtinRoles = roles.filter((r) => r.isBuiltin);
     expect(builtinRoles.length).toBe(7);
 
-    // Platform Administrator should have all capabilities (50)
+    // Platform Administrator should have all capabilities (54, Phase 10: +4 SIEM)
     const platformAdmin = builtinRoles.find(
       (r) => r.slug === "platform-admin"
     );
     expect(platformAdmin).toBeTruthy();
-    expect(platformAdmin!.capabilityCount).toBe(50);
+    expect(platformAdmin!.capabilityCount).toBe(54);
 
-    // Security Analyst should have 28 capabilities
+    // Security Analyst should have 31 capabilities (Phase 10: +3 SIEM)
     const securityAnalyst = builtinRoles.find(
       (r) => r.slug === "security-analyst"
     );
     expect(securityAnalyst).toBeTruthy();
-    expect(securityAnalyst!.capabilityCount).toBe(28);
+    expect(securityAnalyst!.capabilityCount).toBe(31);
 
     // Viewer should have the fewest (4)
     const viewer = builtinRoles.find((r) => r.slug === "viewer");
@@ -141,7 +141,7 @@ test.describe.serial("Role Management", () => {
         if (cap.granted) grantedCaps.push(cap.id);
       }
     }
-    expect(grantedCaps.length).toBe(28);
+    expect(grantedCaps.length).toBe(31);
 
     // Create the custom role
     const createResponse = await apiCall(page, "POST", "/api/roles", {
@@ -159,7 +159,7 @@ test.describe.serial("Role Management", () => {
       capabilityCount: number;
     };
     expect(created.name).toBe(`E2E Test Role ${UNIQUE_SUFFIX}`);
-    expect(created.capabilityCount).toBe(28);
+    expect(created.capabilityCount).toBe(31);
     customRoleId = created.id;
   });
 
@@ -340,7 +340,7 @@ test.describe.serial("Role Management", () => {
       capabilityCount: number;
     };
     expect(updated.name).toBe(`E2E Test Role ${UNIQUE_SUFFIX} Updated`);
-    expect(updated.capabilityCount).toBe(29); // 28 + 1
+    expect(updated.capabilityCount).toBe(32); // 31 + 1
   });
 
   test("should delete custom role with no users assigned", async ({
@@ -494,7 +494,7 @@ test.describe.serial("Role Management", () => {
     expect(moduleNames).toContain("Compliance");
     expect(moduleNames).toContain("Reports");
     expect(moduleNames).toContain("AI Actions");
-    expect(moduleNames).toContain("SIEM");
+    expect(moduleNames).toContain("SIEM / SOC");
     expect(moduleNames).toContain("Administration");
 
     // Capabilities should have risk levels

@@ -110,6 +110,11 @@ export function getActionCategory(action: string): string {
     return "security";
   }
 
+  // SIEM / SOC events
+  if (action.startsWith("siem.")) {
+    return "security";
+  }
+
   return "system";
 }
 
@@ -128,6 +133,9 @@ export function getActionCategory(action: string): string {
 export function getActionSeverity(action: string, result: string): string {
   // --- Critical actions ---
   if (action === "account.locked") return "critical";
+  if (action === "siem.incident.created") return "high";
+  if (action === "siem.alert.escalated") return "high";
+  if (action === "siem.rule.deleted") return "high";
 
   // --- High-severity actions ---
   if (action === "user.suspended") return "high";

@@ -13,6 +13,7 @@ import {
   Bell,
   Settings,
   Shield,
+  ShieldAlert,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -37,7 +38,7 @@ const navItems: NavItem[] = [
   { label: "Compliance", href: "/compliance", icon: ShieldCheck, capability: "compliance.view" },
   { label: "Reports", href: "/reports", icon: FileText, capability: "report.view" },
   { label: "AI Actions", href: "/ai-actions", icon: Bot, capability: "ai.view" },
-  { label: "SIEM", href: "/siem", icon: Bell, capability: "siem.view" },
+  { label: "SIEM / SOC", href: "/siem", icon: ShieldAlert, capability: "siem.view" },
   { label: "Settings", href: "/settings/users", icon: Settings, capability: "admin.user.view" },
 ];
 

@@ -13,6 +13,8 @@ interface Alert {
   status: string;
   source: string;
   createdAt: string;
+  mitreTactic?: string;
+  mitreAttackId?: string;
 }
 
 interface TopbarProps {
@@ -49,13 +51,12 @@ export function Topbar({ user }: TopbarProps) {
 
   // Fetch alert count on mount
   useEffect(() => {
-    fetch("/api/siem")
+    fetch("/api/siem?tab=alerts&limit=10&status=open")
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
         if (data?.alerts) {
-          const open = data.alerts.filter((a: Alert) => a.status === "open" || a.status === "investigating");
-          setAlertCount(open.length);
-          setAlerts(open.slice(0, 5));
+          setAlertCount(data.pagination?.total || data.alerts.length);
+          setAlerts(data.alerts.slice(0, 5));
         }
       })
       .catch(() => {});
@@ -157,17 +158,22 @@ export function Topbar({ user }: TopbarProps) {
                   alerts.map((alert) => (
                     <div
                       key={alert.id}
-                      className="px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/50 transition-colors"
+                      className="px-4 py-3 border-b border-slate-800/50 hover:bg-slate-800/50 transition-colors cursor-pointer"
+                      onClick={() => { setShowNotifications(false); router.push(`/siem/alerts/${alert.id}`); }}
                     >
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5">{severityIcon(alert.severity)}</div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-white truncate">{alert.title}</p>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${severityColor(alert.severity)}`}>
                               {alert.severity}
                             </span>
-                            <span className="text-[10px] text-slate-500">{alert.source}</span>
+                            {alert.mitreAttackId && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 font-mono">
+                                {alert.mitreAttackId}
+                              </span>
+                            )}
                             <span className="text-[10px] text-slate-600">{timeAgo(alert.createdAt)}</span>
                           </div>
                         </div>

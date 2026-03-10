@@ -1,7 +1,7 @@
 /**
  * BYOC Capability Registry v2
  *
- * 46 capabilities across 9 modules. Each capability is a named,
+ * 50 capabilities across 9 modules. Each capability is a named,
  * atomic ability that can be assigned to roles.
  *
  * This file is the single source of truth for all capabilities.
@@ -65,12 +65,16 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "ai.approve.critical", module: "ai", name: "Approve Critical AI Actions", description: "Approve high-risk AI actions (firewall, critical patches)", riskLevel: "critical" },
   { id: "ai.configure", module: "ai", name: "Configure AI Behavior", description: "Set AI autonomy levels, auto-approval rules, and behavioral boundaries", riskLevel: "critical" },
 
-  // ── SIEM (5) ──
-  { id: "siem.view", module: "siem", name: "View SIEM Events", description: "Access security events and alerts", riskLevel: "low" },
+  // ── SIEM / SOC (9) ──
+  { id: "siem.view", module: "siem", name: "View SIEM Events", description: "Access security events, alerts, and SOC dashboard", riskLevel: "low" },
   { id: "siem.acknowledge", module: "siem", name: "Acknowledge Alerts", description: "Mark alerts as reviewed/acknowledged", riskLevel: "low" },
-  { id: "siem.escalate", module: "siem", name: "Escalate Alerts", description: "Escalate alerts to higher-priority queues", riskLevel: "medium" },
-  { id: "siem.rule.manage", module: "siem", name: "Manage SIEM Rules", description: "Create, edit, delete correlation and alerting rules", riskLevel: "high" },
+  { id: "siem.escalate", module: "siem", name: "Escalate Alerts", description: "Escalate alerts to incidents and higher-priority queues", riskLevel: "medium" },
+  { id: "siem.investigate", module: "siem", name: "Investigate Incidents", description: "Update incident status, add evidence, timeline entries", riskLevel: "medium" },
+  { id: "siem.rule.manage", module: "siem", name: "Manage SIEM Rules", description: "Create, edit, toggle, delete detection rules", riskLevel: "high" },
+  { id: "siem.incident.manage", module: "siem", name: "Manage Incidents", description: "Create, assign, close incidents and manage case lifecycle", riskLevel: "high" },
   { id: "siem.integration.manage", module: "siem", name: "Manage SIEM Integrations", description: "Configure log sources, forwarding, and external SIEM connectors", riskLevel: "high" },
+  { id: "siem.hunt", module: "siem", name: "Threat Hunting", description: "Execute threat hunting queries and manage hunt library", riskLevel: "medium" },
+  { id: "siem.export", module: "siem", name: "Export SIEM Data", description: "Export events, alerts, incidents, and reports", riskLevel: "low" },
 
   // ── Administration (13) ──
   { id: "admin.user.view", module: "admin", name: "View Users", description: "See user list and profiles", riskLevel: "low" },
@@ -109,7 +113,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
     name: "Platform Administrator",
     description: "Tenant owner. Unrestricted. Maximum 2 per organization.",
     maxAssignments: 2,
-    capabilities: CAPABILITIES.map((c) => c.id), // All 46
+    capabilities: CAPABILITIES.map((c) => c.id), // All 50
   },
   {
     slug: "org-admin",
@@ -133,7 +137,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "compliance.view", "compliance.assess", "compliance.export",
       "report.view", "report.create", "report.schedule", "report.export",
       "ai.view", "ai.approve.standard",
-      "siem.view", "siem.acknowledge", "siem.escalate",
+      "siem.view", "siem.acknowledge", "siem.escalate", "siem.investigate", "siem.hunt", "siem.export",
       "admin.apikey.manage",
       "admin.audit.view",
     ],
@@ -151,7 +155,7 @@ export const BUILTIN_ROLES: RoleDef[] = [
       "compliance.view", "compliance.export",
       "report.view", "report.export",
       "ai.view",
-      "siem.view",
+      "siem.view", "siem.export",
       "admin.audit.view", "admin.audit.export",
       "admin.user.view", "admin.role.view",
       "admin.sso.view", "admin.scim.view",
@@ -203,7 +207,7 @@ export const CAPABILITY_MODULES = [
   { id: "compliance", name: "Compliance", icon: "ShieldCheck" },
   { id: "report", name: "Reports", icon: "FileText" },
   { id: "ai", name: "AI Actions", icon: "Brain" },
-  { id: "siem", name: "SIEM", icon: "Shield" },
+  { id: "siem", name: "SIEM / SOC", icon: "ShieldAlert" },
   { id: "admin", name: "Administration", icon: "Settings" },
 ] as const;
 

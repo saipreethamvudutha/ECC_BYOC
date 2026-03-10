@@ -954,13 +954,12 @@ async function main() {
       },
     });
 
-    // Assign role
+    // Assign role — clean existing roles first to prevent stale multi-role assignments
     const demoRoleId = roleMap[userDef.roleSlug];
     if (demoRoleId) {
-      await prisma.userRole.upsert({
-        where: { userId_roleId: { userId: demoUser.id, roleId: demoRoleId } },
-        update: {},
-        create: { id: uuid(), userId: demoUser.id, roleId: demoRoleId },
+      await prisma.userRole.deleteMany({ where: { userId: demoUser.id } });
+      await prisma.userRole.create({
+        data: { id: uuid(), userId: demoUser.id, roleId: demoRoleId },
       });
     }
 
@@ -1291,71 +1290,427 @@ async function main() {
 
   console.log(`   ✅ 4 scans, ${scan1Findings.length + scan2Findings.length + scan3Findings.length + scan4Findings.length} findings seeded\n`);
 
-  // ─── 18. Seed SIEM Events & Alerts (Phase 7) ─────────────────────
-  console.log("🔔 Seeding SIEM events and alerts...");
+  // ─── 18. Seed SIEM Rules, Events, Alerts & Incidents (Enterprise SOC) ───
+  console.log("🔔 Seeding enterprise SIEM data...");
 
   await prisma.siemAlert.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.siemIncident.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.siemEvent.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.siemRule.deleteMany({ where: { tenantId: tenant.id } });
 
-  // Create SIEM rule
-  const critRule = await prisma.siemRule.create({
-    data: {
-      id: uuid(), tenantId: tenant.id,
-      name: "Critical Vulnerability Detected",
-      description: "Fires when a scan discovers a critical severity vulnerability",
-      severity: "critical",
-      condition: JSON.stringify({ severity: "critical", source: "scanner" }),
-      isActive: true,
-    },
-  });
-
-  const siemEvents = [
-    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Potential Log4Shell (Log4j RCE) Vulnerability", sourceIp: "10.0.2.10", offset: 2 * DAY },
-    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Environment File (.env) Accessible", sourceIp: "10.0.1.10", offset: 2 * DAY - 5000 },
-    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] RDP Port (3389) Open — BlueKeep Risk", sourceIp: "10.0.1.10", offset: 1 * DAY },
-    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Database Port Exposed to Network", sourceIp: "10.0.3.10", offset: 2 * DAY - 10000 },
-    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] SSL/TLS Certificate Expiring Within 30 Days", sourceIp: "10.0.1.10", offset: 2 * DAY - 15000 },
-    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Admin Panel Exposed", sourceIp: "10.0.1.10", offset: 2 * DAY - 20000 },
-    { source: "auth", severity: "info", category: "authentication", title: "User login successful: admin@exargen.com", sourceIp: "203.0.113.42", offset: 3 * HOUR },
-    { source: "auth", severity: "medium", category: "authentication", title: "Failed login attempt: unknown@exargen.com", sourceIp: "198.51.100.17", offset: 5 * HOUR },
-    { source: "auth", severity: "info", category: "authentication", title: "MFA verification successful: admin@exargen.com", sourceIp: "203.0.113.42", offset: 2 * HOUR },
-    { source: "system", severity: "info", category: "system", title: "Vulnerability scan started: Infrastructure Vulnerability Scan", sourceIp: null, offset: 2 * DAY + 1000 },
-    { source: "system", severity: "info", category: "system", title: "Vulnerability scan completed: 12 findings discovered", sourceIp: null, offset: 2 * DAY - 45000 },
-    { source: "system", severity: "low", category: "system", title: "Security policy updated: password complexity requirements changed", sourceIp: "203.0.113.42", offset: 4 * HOUR },
+  // ── 12 Detection Rules (MITRE ATT&CK mapped) ──
+  const rulesDefs = [
+    { name: "Brute Force / Password Spray", severity: "high", ruleType: "correlation", mitreAttackId: "T1110", mitreTactic: "Credential Access", mitreTechnique: "Brute Force", category: "authentication", confidenceLevel: 85, dataSources: ["endpoint","identity"], condition: { field: "eventAction", operator: "eq", value: "login", threshold: 10, window: "5m" } },
+    { name: "Impossible Travel Login", severity: "high", ruleType: "behavioral", mitreAttackId: "T1078", mitreTactic: "Initial Access", mitreTechnique: "Valid Accounts", category: "authentication", confidenceLevel: 80, dataSources: ["identity","geo"], condition: { field: "geoCountry", operator: "changed", window: "1h" } },
+    { name: "New Admin Account Created", severity: "high", ruleType: "correlation", mitreAttackId: "T1136", mitreTactic: "Persistence", mitreTechnique: "Create Account", category: "identity", confidenceLevel: 90, dataSources: ["identity","directory"], condition: { field: "eventAction", operator: "eq", value: "account_created", role: "admin" } },
+    { name: "Scheduled Task / Cron Creation", severity: "medium", ruleType: "correlation", mitreAttackId: "T1053", mitreTactic: "Execution", mitreTechnique: "Scheduled Task/Job", category: "endpoint", confidenceLevel: 70, dataSources: ["endpoint"], condition: { field: "processName", operator: "in", value: ["schtasks.exe","crontab","at.exe"] } },
+    { name: "PowerShell Encoded Command", severity: "high", ruleType: "correlation", mitreAttackId: "T1059.001", mitreTactic: "Execution", mitreTechnique: "PowerShell", category: "endpoint", confidenceLevel: 88, dataSources: ["endpoint"], condition: { field: "processExecutable", operator: "contains", value: "-EncodedCommand" } },
+    { name: "LSASS Memory Access", severity: "critical", ruleType: "correlation", mitreAttackId: "T1003.001", mitreTactic: "Credential Access", mitreTechnique: "LSASS Memory", category: "endpoint", confidenceLevel: 95, dataSources: ["endpoint","edr"], condition: { field: "processName", operator: "eq", value: "lsass.exe", accessType: "read" } },
+    { name: "Lateral Movement via PsExec/WMI", severity: "high", ruleType: "correlation", mitreAttackId: "T1021", mitreTactic: "Lateral Movement", mitreTechnique: "Remote Services", category: "network", confidenceLevel: 82, dataSources: ["endpoint","network"], condition: { field: "processName", operator: "in", value: ["psexec.exe","wmic.exe"] } },
+    { name: "DNS Tunneling Detected", severity: "high", ruleType: "anomaly", mitreAttackId: "T1071.004", mitreTactic: "Command and Control", mitreTechnique: "DNS", category: "network", confidenceLevel: 75, dataSources: ["dns","network"], condition: { field: "dnsQueryLength", operator: "gt", value: 50, entropyThreshold: 3.5 } },
+    { name: "Data Exfiltration — Large Upload", severity: "critical", ruleType: "anomaly", mitreAttackId: "T1048", mitreTactic: "Exfiltration", mitreTechnique: "Exfiltration Over Alternative Protocol", category: "network", confidenceLevel: 78, dataSources: ["network","proxy"], condition: { field: "bytesOut", operator: "gt", value: 104857600, window: "1h" } },
+    { name: "C2 Beaconing Pattern", severity: "critical", ruleType: "behavioral", mitreAttackId: "T1071", mitreTactic: "Command and Control", mitreTechnique: "Application Layer Protocol", category: "network", confidenceLevel: 85, dataSources: ["network","proxy","dns"], condition: { field: "connectionInterval", operator: "periodic", jitter: 0.1, minBeacons: 20 } },
+    { name: "Cloud IAM Privilege Escalation", severity: "critical", ruleType: "correlation", mitreAttackId: "T1078.004", mitreTactic: "Privilege Escalation", mitreTechnique: "Cloud Accounts", category: "cloud", confidenceLevel: 92, dataSources: ["cloud","identity"], condition: { field: "eventAction", operator: "eq", value: "privilege_escalation", provider: "aws" } },
+    { name: "Ransomware Indicators", severity: "critical", ruleType: "correlation", mitreAttackId: "T1486", mitreTactic: "Impact", mitreTechnique: "Data Encrypted for Impact", category: "endpoint", confidenceLevel: 96, dataSources: ["endpoint","edr"], condition: { field: "fileRenames", operator: "gt", value: 100, window: "5m", extensions: [".encrypted",".locked",".crypted"] } },
   ];
 
-  for (const evt of siemEvents) {
-    await prisma.siemEvent.create({
+  const siemRules: { id: string; name: string; mitreAttackId?: string; mitreTactic?: string; mitreTechnique?: string; severity: string }[] = [];
+  for (const r of rulesDefs) {
+    const rule = await prisma.siemRule.create({
       data: {
         id: uuid(), tenantId: tenant.id,
-        source: evt.source, severity: evt.severity, category: evt.category,
-        title: evt.title, sourceIp: evt.sourceIp, destIp: null,
-        details: JSON.stringify({ automated: evt.source === "scanner" }),
-        createdAt: new Date(Date.now() - evt.offset),
+        name: r.name, description: `Detection rule: ${r.name}`,
+        severity: r.severity, isActive: true,
+        ruleType: r.ruleType, mitreAttackId: r.mitreAttackId,
+        mitreTactic: r.mitreTactic, mitreTechnique: r.mitreTechnique,
+        confidenceLevel: r.confidenceLevel, category: r.category,
+        dataSources: JSON.stringify(r.dataSources),
+        condition: JSON.stringify(r.condition),
       },
     });
+    siemRules.push({ id: rule.id, name: r.name, mitreAttackId: r.mitreAttackId, mitreTactic: r.mitreTactic, mitreTechnique: r.mitreTechnique, severity: r.severity });
   }
+  const ruleByName = (n: string) => siemRules.find(r => r.name.includes(n))!;
 
-  // SIEM Alerts
-  const siemAlerts = [
-    { severity: "critical", title: "Critical: Potential Log4Shell (Log4j RCE) Vulnerability", description: "Critical vulnerability found during Infrastructure Vulnerability Scan", status: "open", offset: 2 * DAY },
-    { severity: "critical", title: "Critical: Environment File (.env) Accessible", description: "Sensitive configuration exposed on production web server", status: "investigating", offset: 2 * DAY - 5000 },
-    { severity: "critical", title: "Critical: RDP Port (3389) Open — BlueKeep Risk", description: "BlueKeep-vulnerable RDP exposed on production server", status: "open", offset: 1 * DAY },
+  // ── ~65 Events across all categories ──
+  const eventDefs: {
+    source: string; severity: string; category: string; title: string;
+    sourceIp?: string | null; destIp?: string | null; sourcePort?: number; destPort?: number;
+    protocol?: string; direction?: string; userName?: string; userDomain?: string;
+    eventOutcome?: string; eventAction?: string; processName?: string; processPid?: number;
+    processParentName?: string; processExecutable?: string; hostName?: string; hostIp?: string;
+    geoCountry?: string; geoCity?: string; threatIntelHit?: boolean; assetCriticality?: string;
+    dataset?: string; module?: string; logLevel?: string; offset: number;
+  }[] = [
+    // Auth events (12)
+    { source: "auth", severity: "info", category: "authentication", title: "User login successful: admin@exargen.com", sourceIp: "203.0.113.42", userName: "admin@exargen.com", eventOutcome: "success", eventAction: "login", geoCountry: "US", geoCity: "New York", dataset: "auth.login", hostName: "exg-idp-01", offset: 3 * HOUR },
+    { source: "auth", severity: "info", category: "authentication", title: "User login successful: soc-analyst@exargen.com", sourceIp: "203.0.113.55", userName: "soc-analyst@exargen.com", eventOutcome: "success", eventAction: "login", geoCountry: "US", geoCity: "Chicago", dataset: "auth.login", hostName: "exg-idp-01", offset: 4 * HOUR },
+    { source: "auth", severity: "medium", category: "authentication", title: "Failed login attempt: unknown@exargen.com", sourceIp: "198.51.100.17", userName: "unknown@exargen.com", eventOutcome: "failure", eventAction: "login", geoCountry: "RU", geoCity: "Moscow", threatIntelHit: true, dataset: "auth.login", hostName: "exg-idp-01", offset: 5 * HOUR },
+    { source: "auth", severity: "high", category: "authentication", title: "Multiple failed logins: brute force suspected", sourceIp: "198.51.100.17", userName: "admin@exargen.com", eventOutcome: "failure", eventAction: "login", geoCountry: "RU", geoCity: "Moscow", threatIntelHit: true, dataset: "auth.login", hostName: "exg-idp-01", offset: 5 * HOUR + 30000 },
+    { source: "auth", severity: "high", category: "authentication", title: "Password spray detected — 15 accounts targeted", sourceIp: "198.51.100.17", destIp: "10.0.1.5", userName: "spray-target", eventOutcome: "failure", eventAction: "login", geoCountry: "RU", geoCity: "Moscow", threatIntelHit: true, dataset: "auth.login", hostName: "exg-idp-01", offset: 5 * HOUR + 60000 },
+    { source: "auth", severity: "info", category: "authentication", title: "MFA verification successful: admin@exargen.com", sourceIp: "203.0.113.42", userName: "admin@exargen.com", eventOutcome: "success", eventAction: "mfa_verify", geoCountry: "US", geoCity: "New York", dataset: "auth.mfa", hostName: "exg-idp-01", offset: 2 * HOUR },
+    { source: "auth", severity: "high", category: "authentication", title: "Impossible travel: login from Moscow after NYC login", sourceIp: "91.207.6.14", userName: "admin@exargen.com", eventOutcome: "success", eventAction: "login", geoCountry: "RU", geoCity: "Moscow", threatIntelHit: true, dataset: "auth.login", hostName: "exg-idp-01", offset: 1 * HOUR },
+    { source: "auth", severity: "high", category: "authentication", title: "Admin account created: backdoor-admin@exargen.com", sourceIp: "10.0.1.50", userName: "backdoor-admin@exargen.com", eventOutcome: "success", eventAction: "account_created", userDomain: "EXARGEN", dataset: "auth.admin", hostName: "exg-dc-01", offset: 8 * HOUR },
+    { source: "auth", severity: "medium", category: "authentication", title: "Privilege escalation: user promoted to admin", sourceIp: "10.0.1.50", userName: "dev-user@exargen.com", eventOutcome: "success", eventAction: "privilege_escalation", userDomain: "EXARGEN", dataset: "auth.admin", hostName: "exg-dc-01", offset: 7 * HOUR },
+    { source: "auth", severity: "info", category: "authentication", title: "User logout: soc-analyst@exargen.com", sourceIp: "203.0.113.55", userName: "soc-analyst@exargen.com", eventOutcome: "success", eventAction: "logout", dataset: "auth.login", hostName: "exg-idp-01", offset: 1 * HOUR },
+    { source: "auth", severity: "medium", category: "authentication", title: "Account locked after 5 failed attempts", sourceIp: "198.51.100.22", userName: "finance@exargen.com", eventOutcome: "failure", eventAction: "login", geoCountry: "CN", geoCity: "Beijing", dataset: "auth.login", hostName: "exg-idp-01", offset: 6 * HOUR },
+    { source: "auth", severity: "info", category: "authentication", title: "Password changed: dev-user@exargen.com", sourceIp: "10.0.1.60", userName: "dev-user@exargen.com", eventOutcome: "success", eventAction: "login", dataset: "auth.admin", hostName: "exg-idp-01", offset: 12 * HOUR },
+    // Network events (10)
+    { source: "firewall", severity: "medium", category: "network", title: "Firewall block: inbound SSH from external IP", sourceIp: "185.220.101.34", destIp: "10.0.1.10", sourcePort: 44521, destPort: 22, protocol: "tcp", direction: "inbound", threatIntelHit: true, dataset: "network.firewall", module: "palo_alto", hostName: "exg-fw-01", offset: 6 * HOUR },
+    { source: "firewall", severity: "high", category: "network", title: "Port scan detected from internal host", sourceIp: "10.0.2.50", destIp: "10.0.1.0/24", sourcePort: 55000, destPort: 0, protocol: "tcp", direction: "internal", dataset: "network.firewall", module: "palo_alto", hostName: "exg-fw-01", offset: 4 * HOUR },
+    { source: "network", severity: "high", category: "network", title: "Lateral movement: PsExec connection to domain controller", sourceIp: "10.0.2.50", destIp: "10.0.1.5", sourcePort: 49152, destPort: 445, protocol: "tcp", direction: "internal", processName: "psexec.exe", userName: "EXARGEN\\compromised-svc", dataset: "network.flow", module: "crowdstrike", hostName: "exg-ws-042", offset: 3 * HOUR + 30000 },
+    { source: "network", severity: "medium", category: "network", title: "Suspicious outbound connection to Tor exit node", sourceIp: "10.0.2.50", destIp: "185.220.101.1", sourcePort: 51200, destPort: 443, protocol: "tcp", direction: "outbound", threatIntelHit: true, dataset: "network.flow", module: "palo_alto", hostName: "exg-ws-042", geoCountry: "DE", offset: 2 * HOUR + 10000 },
+    { source: "firewall", severity: "low", category: "network", title: "Firewall allow: HTTPS to CDN", sourceIp: "10.0.1.10", destIp: "104.18.32.7", sourcePort: 38421, destPort: 443, protocol: "tcp", direction: "outbound", dataset: "network.firewall", module: "palo_alto", hostName: "exg-fw-01", offset: 1 * HOUR },
+    { source: "network", severity: "critical", category: "network", title: "C2 beaconing pattern detected — 10.0.2.50 to 185.143.223.77", sourceIp: "10.0.2.50", destIp: "185.143.223.77", sourcePort: 49300, destPort: 443, protocol: "https", direction: "outbound", threatIntelHit: true, dataset: "network.flow", module: "crowdstrike", hostName: "exg-ws-042", geoCountry: "UA", offset: 2 * HOUR },
+    { source: "network", severity: "critical", category: "network", title: "Large data upload to external storage — 250MB in 10min", sourceIp: "10.0.2.50", destIp: "52.216.100.45", sourcePort: 50100, destPort: 443, protocol: "https", direction: "outbound", dataset: "network.flow", module: "palo_alto", hostName: "exg-ws-042", geoCountry: "US", assetCriticality: "high", offset: 1 * HOUR + 30000 },
+    { source: "dns", severity: "high", category: "network", title: "DNS tunneling: high-entropy subdomain queries to c2.evil.example", sourceIp: "10.0.2.50", destIp: "10.0.1.2", destPort: 53, protocol: "dns", direction: "internal", dataset: "network.dns", module: "infoblox", hostName: "exg-ws-042", offset: 2 * HOUR + 5000 },
+    { source: "dns", severity: "medium", category: "network", title: "DGA domain query: xk7rf2m9p4.biz resolved", sourceIp: "10.0.3.15", destIp: "10.0.1.2", destPort: 53, protocol: "dns", direction: "internal", dataset: "network.dns", module: "infoblox", hostName: "exg-db-01", offset: 5 * HOUR },
+    { source: "dns", severity: "low", category: "network", title: "DNS query for known ad tracker domain", sourceIp: "10.0.1.60", destIp: "10.0.1.2", destPort: 53, protocol: "dns", direction: "internal", dataset: "network.dns", hostName: "exg-ws-015", offset: 8 * HOUR },
+    // Process/Endpoint events (8)
+    { source: "endpoint", severity: "high", category: "process", title: "PowerShell encoded command execution detected", sourceIp: "10.0.2.50", processName: "powershell.exe", processPid: 4892, processParentName: "cmd.exe", processExecutable: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -EncodedCommand SGVsbG8gV29ybGQ=", hostName: "exg-ws-042", hostIp: "10.0.2.50", userName: "EXARGEN\\compromised-svc", dataset: "endpoint.process", module: "crowdstrike", offset: 4 * HOUR },
+    { source: "endpoint", severity: "critical", category: "process", title: "LSASS memory access by non-system process", sourceIp: "10.0.2.50", processName: "mimikatz.exe", processPid: 6712, processParentName: "powershell.exe", processExecutable: "C:\\Users\\Public\\mimikatz.exe", hostName: "exg-ws-042", hostIp: "10.0.2.50", userName: "SYSTEM", dataset: "endpoint.process", module: "crowdstrike", assetCriticality: "high", offset: 3 * HOUR + 45000 },
+    { source: "endpoint", severity: "medium", category: "process", title: "Scheduled task created: Windows Update Helper", sourceIp: "10.0.2.50", processName: "schtasks.exe", processPid: 3201, processParentName: "powershell.exe", processExecutable: "C:\\Windows\\System32\\schtasks.exe", hostName: "exg-ws-042", hostIp: "10.0.2.50", userName: "EXARGEN\\compromised-svc", dataset: "endpoint.process", module: "crowdstrike", offset: 3 * HOUR + 50000 },
+    { source: "endpoint", severity: "critical", category: "process", title: "Ransomware indicator: mass file encryption in progress", sourceIp: "10.0.3.15", processName: "svchost-helper.exe", processPid: 8844, processParentName: "explorer.exe", processExecutable: "C:\\Users\\Public\\svchost-helper.exe", hostName: "exg-db-01", hostIp: "10.0.3.15", userName: "EXARGEN\\db-admin", dataset: "endpoint.process", module: "crowdstrike", assetCriticality: "critical", offset: 30 * 60000 },
+    { source: "endpoint", severity: "critical", category: "process", title: "Shadow copy deletion detected", sourceIp: "10.0.3.15", processName: "vssadmin.exe", processPid: 9102, processParentName: "svchost-helper.exe", processExecutable: "C:\\Windows\\System32\\vssadmin.exe delete shadows /all", hostName: "exg-db-01", hostIp: "10.0.3.15", userName: "SYSTEM", dataset: "endpoint.process", module: "crowdstrike", assetCriticality: "critical", offset: 28 * 60000 },
+    { source: "endpoint", severity: "high", category: "process", title: "Suspicious executable in temp directory", sourceIp: "10.0.1.60", processName: "update-helper.exe", processPid: 5501, processParentName: "outlook.exe", processExecutable: "C:\\Users\\jsmith\\AppData\\Local\\Temp\\update-helper.exe", hostName: "exg-ws-015", hostIp: "10.0.1.60", userName: "EXARGEN\\jsmith", dataset: "endpoint.process", module: "crowdstrike", offset: 10 * HOUR },
+    { source: "endpoint", severity: "medium", category: "process", title: "WMI remote execution to multiple hosts", sourceIp: "10.0.2.50", processName: "wmic.exe", processPid: 7120, processParentName: "cmd.exe", processExecutable: "C:\\Windows\\System32\\wbem\\WMIC.exe", hostName: "exg-ws-042", hostIp: "10.0.2.50", destIp: "10.0.1.5", userName: "EXARGEN\\compromised-svc", dataset: "endpoint.process", module: "crowdstrike", offset: 3 * HOUR + 20000 },
+    { source: "endpoint", severity: "info", category: "process", title: "Antivirus definition update completed", sourceIp: "10.0.1.10", processName: "MsMpEng.exe", processPid: 1200, hostName: "exg-web-prod-01", hostIp: "10.0.1.10", dataset: "endpoint.process", module: "defender", offset: 12 * HOUR },
+    // Cloud IAM events (6)
+    { source: "cloud", severity: "critical", category: "cloud", title: "IAM role escalation: ReadOnly → AdministratorAccess", sourceIp: "10.0.5.10", userName: "dev-user@exargen.com", eventOutcome: "success", eventAction: "privilege_escalation", dataset: "cloud.iam", module: "aws_cloudtrail", geoCountry: "US", hostName: "aws-account-prod", offset: 6 * HOUR },
+    { source: "cloud", severity: "high", category: "cloud", title: "New IAM policy attached with wildcard permissions", sourceIp: "10.0.5.10", userName: "dev-user@exargen.com", eventOutcome: "success", eventAction: "account_created", dataset: "cloud.iam", module: "aws_cloudtrail", geoCountry: "US", hostName: "aws-account-prod", offset: 6 * HOUR + 5000 },
+    { source: "cloud", severity: "medium", category: "cloud", title: "S3 bucket policy modified: public read enabled", sourceIp: "10.0.5.10", userName: "dev-user@exargen.com", eventOutcome: "success", eventAction: "privilege_escalation", dataset: "cloud.storage", module: "aws_cloudtrail", hostName: "aws-account-prod", offset: 5 * HOUR + 30000 },
+    { source: "cloud", severity: "high", category: "cloud", title: "AssumeRole from unfamiliar external account", sourceIp: "198.51.100.88", userName: "arn:aws:iam::112233:role/cross-account", eventOutcome: "success", eventAction: "login", dataset: "cloud.iam", module: "aws_cloudtrail", geoCountry: "SG", hostName: "aws-account-prod", offset: 4 * HOUR + 20000 },
+    { source: "cloud", severity: "info", category: "cloud", title: "CloudTrail logging configuration verified", sourceIp: "10.0.5.10", userName: "security-audit@exargen.com", eventOutcome: "success", dataset: "cloud.audit", module: "aws_cloudtrail", hostName: "aws-account-prod", offset: 18 * HOUR },
+    { source: "cloud", severity: "low", category: "cloud", title: "Lambda function invocation count exceeded threshold", sourceIp: null, dataset: "cloud.compute", module: "aws_cloudwatch", hostName: "aws-account-prod", offset: 14 * HOUR },
+    // Scanner events (6)
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Potential Log4Shell (Log4j RCE) Vulnerability", sourceIp: "10.0.2.10", destIp: "10.0.2.10", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-api-prod-01", hostIp: "10.0.2.10", assetCriticality: "critical", offset: 2 * DAY },
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] Environment File (.env) Accessible", sourceIp: "10.0.1.10", destIp: "10.0.1.10", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-web-prod-01", hostIp: "10.0.1.10", assetCriticality: "high", offset: 2 * DAY - 5000 },
+    { source: "scanner", severity: "critical", category: "vulnerability", title: "[Scan] RDP Port (3389) Open — BlueKeep Risk", sourceIp: "10.0.1.10", destIp: "10.0.1.10", destPort: 3389, protocol: "tcp", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-web-prod-01", hostIp: "10.0.1.10", assetCriticality: "high", offset: 1 * DAY },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Database Port Exposed to Network", sourceIp: "10.0.3.10", destIp: "10.0.3.10", destPort: 5432, protocol: "tcp", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-db-01", hostIp: "10.0.3.10", assetCriticality: "critical", offset: 2 * DAY - 10000 },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] SSL/TLS Certificate Expiring Within 30 Days", sourceIp: "10.0.1.10", destIp: "10.0.1.10", destPort: 443, protocol: "tcp", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-web-prod-01", hostIp: "10.0.1.10", offset: 2 * DAY - 15000 },
+    { source: "scanner", severity: "high", category: "vulnerability", title: "[Scan] Admin Panel Exposed", sourceIp: "10.0.1.10", destIp: "10.0.1.10", destPort: 8443, protocol: "tcp", dataset: "scanner.vulnerability", module: "byoc_scanner", hostName: "exg-web-prod-01", hostIp: "10.0.1.10", offset: 2 * DAY - 20000 },
+    // System events (5)
+    { source: "system", severity: "info", category: "system", title: "Vulnerability scan started: Infrastructure Vulnerability Scan", dataset: "system.audit", hostName: "exg-scanner-01", offset: 2 * DAY + 1000 },
+    { source: "system", severity: "info", category: "system", title: "Vulnerability scan completed: 12 findings discovered", dataset: "system.audit", hostName: "exg-scanner-01", offset: 2 * DAY - 45000 },
+    { source: "system", severity: "low", category: "system", title: "Security policy updated: password complexity requirements changed", sourceIp: "203.0.113.42", userName: "admin@exargen.com", dataset: "system.policy", hostName: "exg-dc-01", offset: 4 * HOUR },
+    { source: "system", severity: "info", category: "system", title: "Firewall rules synchronized across cluster", dataset: "system.config", hostName: "exg-fw-01", offset: 16 * HOUR },
+    { source: "system", severity: "info", category: "system", title: "SIEM correlation engine restarted", dataset: "system.health", hostName: "exg-siem-01", offset: 20 * HOUR },
   ];
 
-  for (const alert of siemAlerts) {
-    await prisma.siemAlert.create({
+  const eventIds: string[] = [];
+  for (const evt of eventDefs) {
+    const { offset, ...rest } = evt;
+    const created = await prisma.siemEvent.create({
       data: {
-        id: uuid(), tenantId: tenant.id, ruleId: critRule.id,
-        severity: alert.severity, title: alert.title,
-        description: alert.description, status: alert.status,
-        createdAt: new Date(Date.now() - alert.offset),
-        acknowledgedAt: alert.status === "investigating" ? new Date(Date.now() - alert.offset + 2 * HOUR) : null,
+        id: uuid(), tenantId: tenant.id,
+        ...rest,
+        sourceIp: rest.sourceIp ?? null, destIp: rest.destIp ?? null,
+        sourcePort: rest.sourcePort ?? null, destPort: rest.destPort ?? null,
+        protocol: rest.protocol ?? null, direction: rest.direction ?? null,
+        userName: rest.userName ?? null, userDomain: rest.userDomain ?? null,
+        eventOutcome: rest.eventOutcome ?? null, eventAction: rest.eventAction ?? null,
+        processName: rest.processName ?? null, processPid: rest.processPid ?? null,
+        processParentName: rest.processParentName ?? null,
+        processExecutable: rest.processExecutable ?? null,
+        hostName: rest.hostName ?? null, hostIp: rest.hostIp ?? null,
+        geoCountry: rest.geoCountry ?? null, geoCity: rest.geoCity ?? null,
+        threatIntelHit: rest.threatIntelHit ?? false,
+        assetCriticality: rest.assetCriticality ?? null,
+        dataset: rest.dataset ?? null, module: rest.module ?? null,
+        logLevel: rest.logLevel ?? null,
+        details: JSON.stringify({ automated: rest.source === "scanner" }),
+        createdAt: new Date(Date.now() - offset),
       },
     });
+    eventIds.push(created.id);
   }
-  console.log(`   ✅ ${siemEvents.length} SIEM events, ${siemAlerts.length} alerts seeded\n`);
+
+  // ── 25 Alerts across all statuses ──
+  const alertDefs: {
+    severity: string; title: string; description: string; status: string;
+    ruleName: string; mitreAttackId?: string; mitreTactic?: string; mitreTechnique?: string;
+    confidenceScore?: number; priorityScore?: number; assignedToName?: string;
+    impactedUsers?: string[]; impactedAssets?: string[];
+    eventIndex: number; offset: number;
+    acknowledgedAt?: number; containedAt?: number; closedAt?: number;
+  }[] = [
+    // 5 open
+    { severity: "critical", title: "Ransomware: Mass file encryption on exg-db-01", description: "Mass file encryption detected with shadow copy deletion on critical database server", status: "open", ruleName: "Ransomware", mitreAttackId: "T1486", mitreTactic: "Impact", mitreTechnique: "Data Encrypted for Impact", confidenceScore: 96, priorityScore: 99, impactedAssets: ["exg-db-01"], impactedUsers: ["EXARGEN\\db-admin"], eventIndex: 35, offset: 30 * 60000 },
+    { severity: "critical", title: "C2 Beaconing: exg-ws-042 → 185.143.223.77", description: "Periodic HTTPS connections matching C2 beaconing pattern detected", status: "open", ruleName: "C2 Beaconing", mitreAttackId: "T1071", mitreTactic: "Command and Control", mitreTechnique: "Application Layer Protocol", confidenceScore: 85, priorityScore: 95, impactedAssets: ["exg-ws-042"], impactedUsers: ["EXARGEN\\compromised-svc"], eventIndex: 17, offset: 2 * HOUR },
+    { severity: "critical", title: "LSASS Memory Access: Credential dumping on exg-ws-042", description: "mimikatz.exe accessed LSASS memory for credential extraction", status: "open", ruleName: "LSASS", mitreAttackId: "T1003.001", mitreTactic: "Credential Access", mitreTechnique: "LSASS Memory", confidenceScore: 95, priorityScore: 97, impactedAssets: ["exg-ws-042"], impactedUsers: ["SYSTEM"], eventIndex: 23, offset: 3 * HOUR + 45000 },
+    { severity: "high", title: "Impossible Travel: admin@exargen.com NYC→Moscow in <1hr", description: "Login from Moscow 45 minutes after New York session", status: "open", ruleName: "Impossible Travel", mitreAttackId: "T1078", mitreTactic: "Initial Access", mitreTechnique: "Valid Accounts", confidenceScore: 80, priorityScore: 82, impactedUsers: ["admin@exargen.com"], eventIndex: 6, offset: 1 * HOUR },
+    { severity: "critical", title: "Data Exfiltration: 250MB upload from exg-ws-042", description: "Large data upload to external S3-compatible storage detected", status: "open", ruleName: "Data Exfil", mitreAttackId: "T1048", mitreTactic: "Exfiltration", mitreTechnique: "Exfiltration Over Alternative Protocol", confidenceScore: 78, priorityScore: 90, impactedAssets: ["exg-ws-042"], impactedUsers: ["EXARGEN\\compromised-svc"], eventIndex: 19, offset: 1 * HOUR + 30000 },
+    // 4 triaging
+    { severity: "high", title: "Brute Force: 15 failed logins from 198.51.100.17", description: "Multiple failed login attempts from Russian IP against admin account", status: "triaging", ruleName: "Brute Force", mitreAttackId: "T1110", mitreTactic: "Credential Access", mitreTechnique: "Brute Force", confidenceScore: 85, priorityScore: 78, impactedUsers: ["admin@exargen.com","finance@exargen.com"], assignedToName: "SOC Analyst", eventIndex: 3, offset: 5 * HOUR, acknowledgedAt: 5 * HOUR - 15 * 60000 },
+    { severity: "high", title: "New Admin Account: backdoor-admin@exargen.com", description: "Unauthorized admin account created outside change window", status: "triaging", ruleName: "New Admin", mitreAttackId: "T1136", mitreTactic: "Persistence", mitreTechnique: "Create Account", confidenceScore: 90, priorityScore: 85, impactedUsers: ["backdoor-admin@exargen.com"], impactedAssets: ["exg-dc-01"], assignedToName: "SOC Lead", eventIndex: 7, offset: 8 * HOUR, acknowledgedAt: 8 * HOUR - 30 * 60000 },
+    { severity: "high", title: "DNS Tunneling: exg-ws-042 querying c2.evil.example", description: "High-entropy subdomain queries consistent with DNS tunneling C2 channel", status: "triaging", ruleName: "DNS Tunneling", mitreAttackId: "T1071.004", mitreTactic: "Command and Control", mitreTechnique: "DNS", confidenceScore: 75, priorityScore: 72, impactedAssets: ["exg-ws-042"], assignedToName: "SOC Analyst", eventIndex: 20, offset: 2 * HOUR + 5000, acknowledgedAt: 2 * HOUR },
+    { severity: "medium", title: "Scheduled Task Creation: Windows Update Helper", description: "Suspicious scheduled task created via PowerShell on compromised workstation", status: "triaging", ruleName: "Scheduled Task", mitreAttackId: "T1053", mitreTactic: "Execution", mitreTechnique: "Scheduled Task/Job", confidenceScore: 70, priorityScore: 55, impactedAssets: ["exg-ws-042"], assignedToName: "SOC Analyst", eventIndex: 25, offset: 3 * HOUR + 50000, acknowledgedAt: 3 * HOUR + 40000 },
+    // 5 investigating
+    { severity: "high", title: "PowerShell Encoded Command on exg-ws-042", description: "Base64-encoded PowerShell command execution detected", status: "investigating", ruleName: "PowerShell", mitreAttackId: "T1059.001", mitreTactic: "Execution", mitreTechnique: "PowerShell", confidenceScore: 88, priorityScore: 80, impactedAssets: ["exg-ws-042"], impactedUsers: ["EXARGEN\\compromised-svc"], assignedToName: "SOC Lead", eventIndex: 22, offset: 4 * HOUR, acknowledgedAt: 4 * HOUR - 10 * 60000 },
+    { severity: "high", title: "Lateral Movement via PsExec: exg-ws-042 → exg-dc-01", description: "PsExec used to execute commands on domain controller", status: "investigating", ruleName: "Lateral Movement", mitreAttackId: "T1021", mitreTactic: "Lateral Movement", mitreTechnique: "Remote Services", confidenceScore: 82, priorityScore: 85, impactedAssets: ["exg-ws-042","exg-dc-01"], impactedUsers: ["EXARGEN\\compromised-svc"], assignedToName: "SOC Lead", eventIndex: 14, offset: 3 * HOUR + 30000, acknowledgedAt: 3 * HOUR + 20000 },
+    { severity: "critical", title: "Cloud IAM Escalation: ReadOnly → AdministratorAccess", description: "IAM role escalated to full admin in production AWS account", status: "investigating", ruleName: "Cloud IAM", mitreAttackId: "T1078.004", mitreTactic: "Privilege Escalation", mitreTechnique: "Cloud Accounts", confidenceScore: 92, priorityScore: 93, impactedUsers: ["dev-user@exargen.com"], impactedAssets: ["aws-account-prod"], assignedToName: "Cloud Security", eventIndex: 37, offset: 6 * HOUR, acknowledgedAt: 6 * HOUR - 20 * 60000 },
+    { severity: "critical", title: "Critical: Potential Log4Shell (Log4j RCE) Vulnerability", description: "Critical vulnerability found during Infrastructure Vulnerability Scan", status: "investigating", ruleName: "Ransomware", mitreAttackId: "T1486", mitreTactic: "Impact", confidenceScore: 90, priorityScore: 92, impactedAssets: ["exg-api-prod-01"], assignedToName: "SOC Lead", eventIndex: 42, offset: 2 * DAY, acknowledgedAt: 2 * DAY - 2 * HOUR },
+    { severity: "high", title: "Suspicious executable via Outlook: exg-ws-015", description: "update-helper.exe spawned from outlook.exe in user temp directory", status: "investigating", ruleName: "PowerShell", confidenceScore: 70, priorityScore: 65, impactedAssets: ["exg-ws-015"], impactedUsers: ["EXARGEN\\jsmith"], assignedToName: "SOC Analyst", eventIndex: 28, offset: 10 * HOUR, acknowledgedAt: 10 * HOUR - 1 * HOUR },
+    // 3 contained
+    { severity: "critical", title: "Critical: Environment File (.env) Accessible", description: "Sensitive configuration exposed on production web server", status: "contained", ruleName: "Ransomware", confidenceScore: 95, priorityScore: 94, impactedAssets: ["exg-web-prod-01"], assignedToName: "DevOps Lead", eventIndex: 43, offset: 2 * DAY - 5000, acknowledgedAt: 2 * DAY - 5000 - 1 * HOUR, containedAt: 2 * DAY - 5000 - 4 * HOUR },
+    { severity: "high", title: "Port scan from internal host exg-ws-042", description: "Internal port scan targeting /24 subnet from compromised host", status: "contained", ruleName: "Lateral Movement", confidenceScore: 85, priorityScore: 75, impactedAssets: ["exg-ws-042","10.0.1.0/24"], assignedToName: "SOC Lead", eventIndex: 13, offset: 4 * HOUR, acknowledgedAt: 4 * HOUR - 15 * 60000, containedAt: 4 * HOUR - 2 * HOUR },
+    { severity: "medium", title: "DGA domain resolution on exg-db-01", description: "Domain generation algorithm queries detected from database server", status: "contained", ruleName: "DNS Tunneling", mitreAttackId: "T1071.004", mitreTactic: "Command and Control", mitreTechnique: "DNS", confidenceScore: 72, priorityScore: 60, impactedAssets: ["exg-db-01"], assignedToName: "SOC Analyst", eventIndex: 21, offset: 5 * HOUR, acknowledgedAt: 5 * HOUR - 30 * 60000, containedAt: 5 * HOUR - 2 * HOUR },
+    // 4 resolved
+    { severity: "critical", title: "Critical: RDP Port (3389) Open — BlueKeep Risk", description: "BlueKeep-vulnerable RDP exposed on production server", status: "resolved", ruleName: "Ransomware", confidenceScore: 98, priorityScore: 96, impactedAssets: ["exg-web-prod-01"], assignedToName: "DevOps Lead", eventIndex: 44, offset: 1 * DAY, acknowledgedAt: 1 * DAY - 1 * HOUR, containedAt: 1 * DAY - 3 * HOUR, closedAt: 1 * DAY - 8 * HOUR },
+    { severity: "high", title: "External SSH brute force attempt blocked", description: "Automated SSH brute force from Tor exit node blocked by firewall", status: "resolved", ruleName: "Brute Force", mitreAttackId: "T1110", mitreTactic: "Credential Access", mitreTechnique: "Brute Force", confidenceScore: 90, priorityScore: 70, impactedAssets: ["exg-fw-01"], assignedToName: "SOC Analyst", eventIndex: 12, offset: 6 * HOUR, acknowledgedAt: 6 * HOUR - 20 * 60000, containedAt: 6 * HOUR - 1 * HOUR, closedAt: 6 * HOUR - 3 * HOUR },
+    { severity: "medium", title: "Tor exit node outbound connection blocked", description: "Outbound connection to known Tor exit node from compromised host", status: "resolved", ruleName: "C2 Beaconing", confidenceScore: 80, priorityScore: 60, impactedAssets: ["exg-ws-042"], assignedToName: "SOC Analyst", eventIndex: 15, offset: 2 * HOUR + 10000, acknowledgedAt: 2 * HOUR, containedAt: 1 * HOUR + 50000, closedAt: 1 * HOUR },
+    { severity: "high", title: "S3 bucket public access enabled", description: "Production S3 bucket policy changed to allow public read access", status: "resolved", ruleName: "Cloud IAM", mitreAttackId: "T1078.004", mitreTactic: "Privilege Escalation", mitreTechnique: "Cloud Accounts", confidenceScore: 88, priorityScore: 80, impactedAssets: ["aws-account-prod"], impactedUsers: ["dev-user@exargen.com"], assignedToName: "Cloud Security", eventIndex: 39, offset: 5 * HOUR + 30000, acknowledgedAt: 5 * HOUR + 20000, containedAt: 5 * HOUR, closedAt: 4 * HOUR },
+    // 2 closed
+    { severity: "medium", title: "Account lockout: finance@exargen.com", description: "Account locked after 5 failed login attempts from Chinese IP", status: "closed", ruleName: "Brute Force", mitreAttackId: "T1110", mitreTactic: "Credential Access", mitreTechnique: "Brute Force", confidenceScore: 85, priorityScore: 50, impactedUsers: ["finance@exargen.com"], assignedToName: "SOC Analyst", eventIndex: 10, offset: 6 * HOUR, acknowledgedAt: 6 * HOUR - 10 * 60000, closedAt: 5 * HOUR },
+    { severity: "low", title: "Ad tracker DNS query — informational", description: "DNS query for known advertising tracker domain", status: "closed", ruleName: "DNS Tunneling", confidenceScore: 30, priorityScore: 10, impactedAssets: ["exg-ws-015"], eventIndex: 21, offset: 8 * HOUR, closedAt: 7 * HOUR },
+    // 2 false_positive
+    { severity: "medium", title: "False Positive: Lambda invocation spike", description: "Lambda spike was due to scheduled batch processing — not anomalous", status: "false_positive", ruleName: "C2 Beaconing", confidenceScore: 20, priorityScore: 15, eventIndex: 43, offset: 14 * HOUR, closedAt: 13 * HOUR },
+    { severity: "low", title: "False Positive: Antivirus update traffic", description: "Periodic outbound connections were Windows Defender definition updates", status: "false_positive", ruleName: "C2 Beaconing", confidenceScore: 10, priorityScore: 5, impactedAssets: ["exg-web-prod-01"], eventIndex: 29, offset: 12 * HOUR, closedAt: 11 * HOUR },
+  ];
+
+  const alertIds: string[] = [];
+  for (const a of alertDefs) {
+    const rule = ruleByName(a.ruleName);
+    const eIdx = Math.min(a.eventIndex, eventIds.length - 1);
+    const created = await prisma.siemAlert.create({
+      data: {
+        id: uuid(), tenantId: tenant.id,
+        ruleId: rule.id, eventId: eventIds[eIdx],
+        severity: a.severity, title: a.title,
+        description: a.description, status: a.status,
+        mitreAttackId: a.mitreAttackId ?? rule.mitreAttackId ?? null,
+        mitreTactic: a.mitreTactic ?? rule.mitreTactic ?? null,
+        mitreTechnique: a.mitreTechnique ?? rule.mitreTechnique ?? null,
+        confidenceScore: a.confidenceScore ?? null,
+        priorityScore: a.priorityScore ?? null,
+        assignedToName: a.assignedToName ?? null,
+        impactedUsers: JSON.stringify(a.impactedUsers ?? []),
+        impactedAssets: JSON.stringify(a.impactedAssets ?? []),
+        createdAt: new Date(Date.now() - a.offset),
+        acknowledgedAt: a.acknowledgedAt ? new Date(Date.now() - a.acknowledgedAt) : null,
+        containedAt: a.containedAt ? new Date(Date.now() - a.containedAt) : null,
+        closedAt: a.closedAt ? new Date(Date.now() - a.closedAt) : null,
+      },
+    });
+    alertIds.push(created.id);
+  }
+
+  // ── 5 Incidents ──
+  const incidentDefs = [
+    {
+      title: "Active Ransomware Attack — exg-db-01",
+      description: "Ransomware attack in progress targeting database server with file encryption and shadow copy deletion",
+      severity: "critical", status: "investigating", priority: "critical",
+      assignedToName: "SOC Lead", impactSummary: "Critical database server under active ransomware attack. File encryption detected with VSS shadow copy deletion. Potential data loss for production databases.",
+      impactedUsers: ["EXARGEN\\db-admin"], impactedAssets: ["exg-db-01","exg-ws-042"],
+      rootCause: "Initial compromise via phishing email → lateral movement → credential theft → ransomware deployment",
+      mitreTactics: ["Execution","Credential Access","Lateral Movement","Impact"],
+      mitreTechniques: ["T1059.001","T1003.001","T1021","T1486"],
+      slaBreached: false, detectedOffset: 30 * 60000,
+      alertIndices: [0, 2, 10, 11],
+      timeline: [
+        { timestamp: -35 * 60000, action: "detected", actor: "SIEM Correlation Engine", details: "Mass file encryption detected on exg-db-01" },
+        { timestamp: -30 * 60000, action: "acknowledged", actor: "SOC Analyst", details: "Alert escalated to incident — ransomware indicators confirmed" },
+        { timestamp: -25 * 60000, action: "investigation_started", actor: "SOC Lead", details: "Investigation initiated — correlating with prior C2 and lateral movement alerts" },
+        { timestamp: -20 * 60000, action: "evidence_collected", actor: "SOC Lead", details: "Memory dump and disk image collected from exg-db-01" },
+      ],
+      evidence: [
+        { type: "memory_dump", name: "exg-db-01-memdump-20260310.raw", addedAt: -20 * 60000 },
+        { type: "disk_image", name: "exg-db-01-disk-20260310.e01", addedAt: -18 * 60000 },
+        { type: "log_export", name: "crowdstrike-exg-db-01-events.json", addedAt: -15 * 60000 },
+      ],
+      remediationSteps: [
+        { step: "Isolate exg-db-01 from network", status: "completed", assignee: "Network Team" },
+        { step: "Disable compromised service account", status: "completed", assignee: "IAM Team" },
+        { step: "Collect forensic evidence", status: "in_progress", assignee: "SOC Lead" },
+        { step: "Restore from clean backup", status: "pending", assignee: "DBA Team" },
+        { step: "Reset all domain credentials", status: "pending", assignee: "IAM Team" },
+      ],
+      complianceMapping: [
+        { framework: "NIST CSF 2.0", control: "RS.AN-01" }, { framework: "NIST CSF 2.0", control: "RS.MI-01" },
+        { framework: "CIS v8.1", control: "17.1" }, { framework: "PCI DSS", control: "12.10" },
+      ],
+    },
+    {
+      title: "Brute Force Campaign — External Credential Attack",
+      description: "Sustained brute force and password spray campaign targeting multiple user accounts from Russian IP range",
+      severity: "high", status: "contained", priority: "high",
+      assignedToName: "SOC Analyst", impactSummary: "Multiple accounts targeted by brute force from 198.51.100.17. One account locked, no confirmed compromise. IP blocked at firewall.",
+      impactedUsers: ["admin@exargen.com","finance@exargen.com","unknown@exargen.com"],
+      impactedAssets: ["exg-idp-01","exg-fw-01"],
+      rootCause: "Automated credential stuffing attack from known malicious IP range in Russia",
+      mitreTactics: ["Credential Access","Initial Access"],
+      mitreTechniques: ["T1110","T1078"],
+      slaBreached: false, detectedOffset: 5 * HOUR,
+      acknowledgedOffset: 5 * HOUR - 15 * 60000, containedOffset: 5 * HOUR - 2 * HOUR,
+      alertIndices: [5, 6, 18, 22],
+      timeline: [
+        { timestamp: -(5 * HOUR + 30000), action: "detected", actor: "SIEM Correlation Engine", details: "Multiple failed login attempts from single IP exceeds threshold" },
+        { timestamp: -(5 * HOUR), action: "acknowledged", actor: "SOC Analyst", details: "Brute force pattern confirmed — 15 accounts targeted in 30 minutes" },
+        { timestamp: -(4 * HOUR + 30000), action: "investigation_started", actor: "SOC Analyst", details: "IP reputation checked — known malicious, ThreatIntel hit confirmed" },
+        { timestamp: -(4 * HOUR), action: "containment_initiated", actor: "SOC Analyst", details: "IP 198.51.100.17 blocked at perimeter firewall" },
+        { timestamp: -(3 * HOUR), action: "contained", actor: "Network Team", details: "Entire /24 subnet blocked. No successful authentications from source IP confirmed." },
+      ],
+      evidence: [
+        { type: "log_export", name: "auth-failures-198.51.100.17.json", addedAt: -(4 * HOUR) },
+        { type: "threat_intel", name: "ip-reputation-198.51.100.17.pdf", addedAt: -(4 * HOUR + 15 * 60000) },
+      ],
+      remediationSteps: [
+        { step: "Block source IP at perimeter firewall", status: "completed", assignee: "Network Team" },
+        { step: "Block /24 subnet", status: "completed", assignee: "Network Team" },
+        { step: "Force password reset for targeted accounts", status: "completed", assignee: "IAM Team" },
+        { step: "Enable enhanced monitoring for auth events", status: "in_progress", assignee: "SOC Analyst" },
+      ],
+      complianceMapping: [
+        { framework: "NIST CSF 2.0", control: "PR.AC-07" }, { framework: "CIS v8.1", control: "6.2" },
+      ],
+    },
+    {
+      title: "Data Exfiltration Attempt — Compromised Workstation",
+      description: "250MB data upload to external storage from compromised workstation exg-ws-042, linked to C2 beaconing",
+      severity: "high", status: "recovered", priority: "high",
+      assignedToName: "SOC Lead", impactSummary: "Compromised workstation exg-ws-042 used to exfiltrate ~250MB to external S3 storage. C2 channel identified and neutralized. Data loss assessment pending.",
+      impactedUsers: ["EXARGEN\\compromised-svc"], impactedAssets: ["exg-ws-042"],
+      rootCause: "Phishing email delivered malicious executable → C2 established → data exfiltrated via HTTPS to attacker-controlled S3 bucket",
+      mitreTactics: ["Command and Control","Exfiltration","Execution"],
+      mitreTechniques: ["T1071","T1048","T1059.001"],
+      slaBreached: false, detectedOffset: 2 * HOUR,
+      acknowledgedOffset: 2 * HOUR - 10 * 60000, containedOffset: 1 * HOUR + 30000, resolvedOffset: 30 * 60000,
+      alertIndices: [1, 4, 9, 19],
+      timeline: [
+        { timestamp: -(2 * HOUR + 10000), action: "detected", actor: "SIEM Anomaly Engine", details: "Large data upload anomaly detected from exg-ws-042" },
+        { timestamp: -(2 * HOUR), action: "acknowledged", actor: "SOC Analyst", details: "Correlated with C2 beaconing alert — confirmed data exfiltration" },
+        { timestamp: -(1 * HOUR + 40000), action: "investigation_started", actor: "SOC Lead", details: "Full network traffic analysis initiated" },
+        { timestamp: -(1 * HOUR + 30000), action: "containment_initiated", actor: "SOC Lead", details: "Workstation isolated from network. Outbound connections blocked." },
+        { timestamp: -(1 * HOUR), action: "contained", actor: "Network Team", details: "All C2 IPs blocked at firewall. DNS sinkhole for C2 domains activated." },
+        { timestamp: -(30 * 60000), action: "resolved", actor: "SOC Lead", details: "Workstation reimaged. Service account credentials rotated. Monitoring enhanced." },
+      ],
+      evidence: [
+        { type: "pcap", name: "exg-ws-042-exfil-traffic.pcap", addedAt: -(1 * HOUR + 30000) },
+        { type: "malware_sample", name: "update-helper.exe.zip", addedAt: -(1 * HOUR) },
+        { type: "log_export", name: "network-flows-exg-ws-042.json", addedAt: -(1 * HOUR + 20000) },
+      ],
+      remediationSteps: [
+        { step: "Isolate compromised workstation", status: "completed", assignee: "Network Team" },
+        { step: "Block C2 infrastructure at all layers", status: "completed", assignee: "Network Team" },
+        { step: "Rotate compromised service account", status: "completed", assignee: "IAM Team" },
+        { step: "Reimage workstation from clean image", status: "completed", assignee: "Desktop Team" },
+        { step: "Conduct data loss impact assessment", status: "in_progress", assignee: "Compliance Team" },
+      ],
+      complianceMapping: [
+        { framework: "NIST CSF 2.0", control: "DE.AE-02" }, { framework: "NIST CSF 2.0", control: "RS.AN-01" },
+        { framework: "GDPR", control: "Art. 33" }, { framework: "PCI DSS", control: "12.10.1" },
+      ],
+    },
+    {
+      title: "False Positive Investigation — Lambda Spike",
+      description: "Lambda invocation spike initially flagged as C2 beaconing was confirmed as scheduled batch processing",
+      severity: "medium", status: "closed", priority: "low",
+      assignedToName: "SOC Analyst", impactSummary: "No actual security impact. Lambda spike was caused by scheduled monthly batch processing job.",
+      impactedAssets: ["aws-account-prod"],
+      rootCause: "Scheduled monthly batch processing job caused Lambda invocation spike matching C2 beaconing detection pattern",
+      mitreTactics: ["Command and Control"], mitreTechniques: ["T1071"],
+      slaBreached: false, detectedOffset: 14 * HOUR,
+      acknowledgedOffset: 14 * HOUR - 30 * 60000, resolvedOffset: 13 * HOUR + 30000, closedOffset: 13 * HOUR,
+      alertIndices: [23],
+      timeline: [
+        { timestamp: -(14 * HOUR), action: "detected", actor: "SIEM Behavioral Engine", details: "Periodic connection pattern matched C2 beaconing rule" },
+        { timestamp: -(14 * HOUR - 30 * 60000), action: "acknowledged", actor: "SOC Analyst", details: "Alert reviewed — source is Lambda function, not endpoint" },
+        { timestamp: -(14 * HOUR - 45 * 60000), action: "investigated", actor: "SOC Analyst", details: "CloudWatch logs confirm scheduled batch job. Pattern matches monthly schedule." },
+        { timestamp: -(13 * HOUR + 30000), action: "resolved", actor: "SOC Analyst", details: "Confirmed false positive. Rule tuning recommended." },
+        { timestamp: -(13 * HOUR), action: "closed", actor: "SOC Lead", details: "Closed as false positive. C2 beaconing rule updated with Lambda exclusion." },
+      ],
+      evidence: [
+        { type: "log_export", name: "cloudwatch-lambda-invocations.json", addedAt: -(14 * HOUR - 45 * 60000) },
+      ],
+      remediationSteps: [
+        { step: "Verify Lambda invocation source", status: "completed", assignee: "SOC Analyst" },
+        { step: "Update C2 beaconing rule with Lambda exclusion", status: "completed", assignee: "SOC Lead" },
+      ],
+      complianceMapping: [],
+    },
+    {
+      title: "Cloud IAM Privilege Escalation — AWS Production",
+      description: "Developer account escalated IAM permissions to full admin in production AWS account, followed by S3 policy modification",
+      severity: "critical", status: "investigating", priority: "critical",
+      assignedToName: "Cloud Security", impactSummary: "Developer dev-user@exargen.com escalated own IAM role to AdministratorAccess. S3 bucket policy modified to allow public read. Potential data exposure.",
+      impactedUsers: ["dev-user@exargen.com"], impactedAssets: ["aws-account-prod"],
+      mitreTactics: ["Privilege Escalation","Initial Access"],
+      mitreTechniques: ["T1078.004"],
+      slaBreached: true, detectedOffset: 6 * HOUR,
+      acknowledgedOffset: 6 * HOUR - 20 * 60000,
+      alertIndices: [12, 21],
+      timeline: [
+        { timestamp: -(6 * HOUR), action: "detected", actor: "SIEM Correlation Engine", details: "IAM role escalation from ReadOnly to AdministratorAccess detected" },
+        { timestamp: -(6 * HOUR - 20 * 60000), action: "acknowledged", actor: "Cloud Security", details: "Confirmed unauthorized escalation — no change request or approval found" },
+        { timestamp: -(6 * HOUR - 30 * 60000), action: "investigation_started", actor: "Cloud Security", details: "CloudTrail analysis initiated — mapping all actions taken with elevated permissions" },
+        { timestamp: -(5 * HOUR + 30000), action: "evidence_collected", actor: "Cloud Security", details: "S3 bucket public access modification discovered — checking for data exposure" },
+      ],
+      evidence: [
+        { type: "log_export", name: "cloudtrail-dev-user-actions.json", addedAt: -(6 * HOUR - 30 * 60000) },
+        { type: "config_snapshot", name: "s3-bucket-policy-before-after.json", addedAt: -(5 * HOUR + 30000) },
+      ],
+      remediationSteps: [
+        { step: "Revoke AdministratorAccess from dev-user", status: "completed", assignee: "Cloud Security" },
+        { step: "Revert S3 bucket policy to private", status: "completed", assignee: "Cloud Security" },
+        { step: "Audit all actions performed with elevated permissions", status: "in_progress", assignee: "Cloud Security" },
+        { step: "Implement SCP to prevent self-escalation", status: "pending", assignee: "Cloud Architecture" },
+        { step: "Review IAM policy attachment permissions", status: "pending", assignee: "Cloud Architecture" },
+      ],
+      complianceMapping: [
+        { framework: "NIST CSF 2.0", control: "PR.AC-04" }, { framework: "CIS v8.1", control: "5.4" },
+        { framework: "PCI DSS", control: "7.1" },
+      ],
+    },
+  ];
+
+  const siemIncidents: string[] = [];
+  for (const inc of incidentDefs) {
+    const timelineJson = inc.timeline.map(t => ({
+      ...t, timestamp: new Date(Date.now() + t.timestamp).toISOString(),
+    }));
+    const evidenceJson = inc.evidence.map(e => ({
+      ...e, addedAt: new Date(Date.now() + e.addedAt).toISOString(),
+    }));
+
+    const incident = await prisma.siemIncident.create({
+      data: {
+        id: uuid(), tenantId: tenant.id,
+        title: inc.title, description: inc.description,
+        severity: inc.severity, status: inc.status, priority: inc.priority,
+        assignedToName: inc.assignedToName ?? null,
+        impactSummary: inc.impactSummary ?? null,
+        impactedUsers: JSON.stringify(inc.impactedUsers ?? []),
+        impactedAssets: JSON.stringify(inc.impactedAssets ?? []),
+        rootCause: inc.rootCause ?? null,
+        mitreTactics: JSON.stringify(inc.mitreTactics ?? []),
+        mitreTechniques: JSON.stringify(inc.mitreTechniques ?? []),
+        timeline: JSON.stringify(timelineJson),
+        evidence: JSON.stringify(evidenceJson),
+        remediationSteps: JSON.stringify(inc.remediationSteps ?? []),
+        complianceMapping: JSON.stringify(inc.complianceMapping ?? []),
+        slaBreached: inc.slaBreached ?? false,
+        detectedAt: new Date(Date.now() - inc.detectedOffset),
+        acknowledgedAt: inc.acknowledgedOffset ? new Date(Date.now() - inc.acknowledgedOffset) : null,
+        containedAt: inc.containedOffset ? new Date(Date.now() - inc.containedOffset) : null,
+        resolvedAt: inc.resolvedOffset ? new Date(Date.now() - inc.resolvedOffset) : null,
+        closedAt: inc.closedOffset ? new Date(Date.now() - inc.closedOffset) : null,
+      },
+    });
+    siemIncidents.push(incident.id);
+
+    // Link alerts to incident
+    for (const ai of inc.alertIndices) {
+      if (ai < alertIds.length) {
+        await prisma.siemAlert.update({
+          where: { id: alertIds[ai] },
+          data: { incidentId: incident.id },
+        });
+      }
+    }
+  }
+
+  console.log(`   ✅ ${siemRules.length} rules, ${eventIds.length} events, ${alertIds.length} alerts, ${siemIncidents.length} incidents seeded\n`);
 
   // ─── 19. Seed AI Actions (Phase 7) ───────────────────────────────
   console.log("🤖 Seeding AI actions...");
@@ -1389,13 +1744,13 @@ async function main() {
 
   // ─── Summary ─────────────────────────────────────────────────────
   console.log("═══════════════════════════════════════════════════════════");
-  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 7)");
+  console.log("  ✅ SEED COMPLETED — Exargen Production (Phase 10 — Enterprise SOC)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  ${CAPABILITIES.length} capabilities · ${BUILTIN_ROLES.length} roles · 6 scopes`);
   console.log(`  ${tagDefinitions.length} tags · ${assetDefinitions.length} assets · ${autoTagRules.length} auto-tag rules`);
   console.log(`  ${auditEvents.length} audit events (hash-chained) · ${sessionDefinitions.length} sessions`);
-  console.log(`  3 scans · 30 findings · ${siemEvents.length} SIEM events · ${aiActions.length} AI actions`);
-  console.log(`  5 users (1 admin + ${demoUsers.length} demo users)`);
+  console.log(`  4 scans · 30 findings · ${siemRules.length} SIEM rules · ${eventIds.length} events · ${alertIds.length} alerts · ${siemIncidents.length} incidents`);
+  console.log(`  ${aiActions.length} AI actions · 5 users (1 admin + ${demoUsers.length} demo users)`);
   console.log("");
   console.log("  Login Credentials:");
   console.log("  ├─ Platform Admin:     admin@exargen.com    / Admin123!");

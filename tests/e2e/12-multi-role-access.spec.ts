@@ -31,9 +31,9 @@ const ADMIN = { email: "admin@exargen.com", password: "Admin123!", name: "Exarge
 
 // ─── Expected Capabilities Per Role ────────────────────────────────
 const VIEWER_CAPS = ["dash.view", "risk.view", "report.view", "report.export"];
-const ANALYST_CAP_COUNT = 28;
-const AUDITOR_CAP_COUNT = 19;
-const ADMIN_CAP_COUNT = 50;
+const ANALYST_CAP_COUNT = 31;  // Phase 10: +3 SIEM (investigate, hunt, export)
+const AUDITOR_CAP_COUNT = 20;  // Phase 10: +1 SIEM (export)
+const ADMIN_CAP_COUNT = 54;   // Phase 10: +4 SIEM capabilities
 
 // ═══════════════════════════════════════════════════════════════════
 // VIEWER TESTS — Most restricted (executives/stakeholders)
@@ -332,10 +332,10 @@ test.describe("Multi-Role: Cross-Role Verification", () => {
 
   test("capability counts are correct for all roles", async ({ page }) => {
     const expected = [
-      { ...VIEWER, capCount: 4, role: "viewer" },
-      { ...ANALYST, capCount: 28, role: "security-analyst" },
-      { ...AUDITOR, capCount: 19, role: "auditor" },
-      { ...ADMIN, capCount: 50, role: "platform-admin" },
+      { ...VIEWER, capCount: VIEWER_CAPS.length, role: "viewer" },
+      { ...ANALYST, capCount: ANALYST_CAP_COUNT, role: "security-analyst" },
+      { ...AUDITOR, capCount: AUDITOR_CAP_COUNT, role: "auditor" },
+      { ...ADMIN, capCount: ADMIN_CAP_COUNT, role: "platform-admin" },
     ];
 
     for (const user of expected) {

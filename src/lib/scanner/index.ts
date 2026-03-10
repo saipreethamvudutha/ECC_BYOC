@@ -208,6 +208,13 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
     );
 
     if (criticalHighFindings.length > 0) {
+      // Look up target asset for enrichment
+      const targetHost = targets[0]?.replace(/^https?:\/\//, "").replace(/[:/].*$/, "");
+      const targetAsset = targetHost ? await prisma.asset.findFirst({
+        where: { tenantId, OR: [{ ipAddress: targetHost }, { hostname: targetHost }] },
+        select: { name: true, hostname: true, ipAddress: true, criticality: true },
+      }) : null;
+
       await prisma.siemEvent.createMany({
         data: criticalHighFindings.map((f) => ({
           tenantId,
@@ -225,6 +232,13 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
           }),
           sourceIp: targets[0] || null,
           destIp: null,
+          // ECS enrichment fields (Phase 10)
+          hostName: targetAsset?.hostname || targetHost || null,
+          hostIp: targetAsset?.ipAddress || targets[0] || null,
+          assetCriticality: targetAsset?.criticality || null,
+          dataset: "scanner.vulnerability",
+          module: "byoc_scanner",
+          logLevel: f.severity === "critical" ? "critical" : "warning",
         })),
       });
 
@@ -244,6 +258,11 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
               severity: "critical",
               condition: JSON.stringify({ severity: "critical", source: "scanner" }),
               isActive: true,
+              // Phase 10: MITRE ATT&CK enrichment
+              ruleType: "correlation",
+              category: "vulnerability",
+              dataSources: JSON.stringify(["scanner"]),
+              confidenceLevel: 90,
             },
           });
         }
@@ -256,6 +275,11 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
             title: `Critical: ${f.title}`,
             description: f.description || `Critical vulnerability found during scan "${scan.name}"`,
             status: "open",
+            // Phase 10: Scoring & context enrichment
+            confidenceScore: 90,
+            priorityScore: 90,
+            assetCriticalityWeight: targetAsset?.criticality || null,
+            impactedAssets: JSON.stringify(targetAsset ? [targetAsset.name || targetAsset.hostname] : []),
           })),
         });
       }

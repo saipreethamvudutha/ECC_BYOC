@@ -37,32 +37,21 @@ test.describe("Feature Modules", () => {
   test("should load SIEM page with events and alert sections", async ({ page }) => {
     await navigateTo(page, "/siem");
 
-    // Wait for page load
-    await page.waitForSelector('h1:has-text("SIEM Dashboard")', { state: "visible", timeout: 15000 });
+    // Wait for page load — SOC Operations Center (needs time to fetch all SIEM data)
+    await page.waitForSelector('text=SOC Operations Center', { state: "visible", timeout: 30000 });
 
     // Verify heading
-    await expect(page.getByText("SIEM Dashboard")).toBeVisible();
+    await expect(page.getByText("SOC Operations Center")).toBeVisible();
 
-    // Verify stat cards
-    await expect(page.getByText("Total Events")).toBeVisible();
-    await expect(page.getByText("Critical Events")).toBeVisible();
-    await expect(page.getByText("Open Alerts")).toBeVisible();
+    // Verify SOC Overview metric cards
+    await expect(page.getByText("Open Alerts")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Active Incidents")).toBeVisible();
 
-    // Verify Events tab button is visible
-    const eventsTab = page.locator('button:has-text("Events")').first();
-    await expect(eventsTab).toBeVisible();
-
-    // Verify Alerts tab button is visible
-    const alertsTab = page.locator('button:has-text("Alerts")').first();
-    await expect(alertsTab).toBeVisible();
-
-    // Verify Security Events section is displayed (default tab)
-    await expect(page.getByText("Security Events").first()).toBeVisible();
-
-    // Click Alerts tab and verify it loads
-    await alertsTab.click();
-    await page.waitForTimeout(500);
-    await expect(page.getByText("Security Alerts")).toBeVisible();
+    // Verify tabs exist
+    const alertQueueTab = page.getByRole("button", { name: /Alert Queue/i });
+    await expect(alertQueueTab).toBeVisible();
+    const incidentsTab = page.getByRole("button", { name: /Incidents/i });
+    await expect(incidentsTab).toBeVisible();
   });
 
   test("should load AI Actions page", async ({ page }) => {
@@ -99,7 +88,7 @@ test.describe("Feature Modules", () => {
     // Verify all 4 report templates
     await expect(page.getByText("Vulnerability Report")).toBeVisible();
     await expect(page.getByText("Compliance Report")).toBeVisible();
-    await expect(page.getByText("Executive Summary")).toBeVisible();
+    await expect(page.getByText("Executive Summary").first()).toBeVisible();
     await expect(page.getByText("Technical Report")).toBeVisible();
 
     // Verify Generate buttons are present (one per template)
