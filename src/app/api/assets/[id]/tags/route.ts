@@ -54,11 +54,9 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
-    session.id, session.tenantId, "asset.tag.manage"
-  );
+  const allowed = await rbac.checkCapability(session.id, session.tenantId, "asset.edit");
   if (!allowed) {
-    return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -75,18 +73,35 @@ export async function POST(
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
-  const { tagIds } = await request.json();
+  const body = await request.json();
+  const { tagIds, key, value } = body;
 
-  if (!tagIds || !Array.isArray(tagIds) || tagIds.length === 0) {
+  // Support both modes: tagIds array OR key/value for direct tag creation
+  const resolvedTagIds: string[] = [];
+
+  if (key && value) {
+    // Find or create the tag, then assign it
+    let tag = await prisma.tag.findFirst({
+      where: { tenantId: session.tenantId, key, value },
+    });
+    if (!tag) {
+      tag = await prisma.tag.create({
+        data: { tenantId: session.tenantId, key, value },
+      });
+    }
+    resolvedTagIds.push(tag.id);
+  } else if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+    resolvedTagIds.push(...tagIds);
+  } else {
     return NextResponse.json(
-      { error: "tagIds array is required" },
+      { error: "Either tagIds array or key/value pair is required" },
       { status: 400 }
     );
   }
 
   // Upsert each tag assignment (skip duplicates)
   const results = [];
-  for (const tagId of tagIds) {
+  for (const tagId of resolvedTagIds) {
     // Verify tag belongs to tenant
     const tag = await prisma.tag.findFirst({
       where: { id: tagId, tenantId: session.tenantId },

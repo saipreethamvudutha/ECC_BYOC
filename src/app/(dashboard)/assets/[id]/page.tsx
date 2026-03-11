@@ -3,6 +3,8 @@
 import { useEffect, useState, use } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Server,
@@ -11,9 +13,16 @@ import {
   Clock,
   Globe,
   Tag,
+  Pencil,
+  Save,
+  X,
+  Plus,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { cn, formatDateTime, severityColor } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
+import { Gate } from "@/components/rbac/Gate";
 import Link from "next/link";
 
 interface ServiceInfo {
@@ -92,18 +101,73 @@ const typeIcons: Record<string, string> = {
   iot_device: "IoT Device",
 };
 
+const CRITICALITY_OPTIONS = ["critical", "high", "medium", "low"];
+const ASSET_TYPES = [
+  "server", "workstation", "network_device", "cloud_resource", "application",
+  "database", "iot_device", "mobile_device", "virtual_machine", "container", "firewall", "load_balancer",
+];
+
 export default function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", type: "", criticality: "", ipAddress: "", hostname: "", os: "", physicalLocation: "", assetOwner: "" });
+  const [newTagKey, setNewTagKey] = useState("");
+  const [newTagValue, setNewTagValue] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
 
-  useEffect(() => {
+  function loadAsset() {
     fetch(`/api/assets/${id}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setAsset(data))
+      .then((data) => {
+        setAsset(data);
+        if (data) setEditForm({
+          name: data.name || "", type: data.type || "", criticality: data.criticality || "",
+          ipAddress: data.ipAddress || "", hostname: data.hostname || "", os: data.os || "",
+          physicalLocation: data.physicalLocation || "", assetOwner: data.assetOwner || "",
+        });
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [id]);
+  }
+
+  useEffect(() => { loadAsset(); }, [id]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/assets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) { setEditing(false); loadAsset(); }
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  }
+
+  async function handleAddTag() {
+    if (!newTagKey || !newTagValue) return;
+    setAddingTag(true);
+    try {
+      const res = await fetch(`/api/assets/${id}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: newTagKey, value: newTagValue }),
+      });
+      if (res.ok) { setNewTagKey(""); setNewTagValue(""); loadAsset(); }
+    } catch (e) { console.error(e); }
+    finally { setAddingTag(false); }
+  }
+
+  async function handleRemoveTag(tagId: string) {
+    try {
+      const res = await fetch(`/api/assets/${id}/tags/${tagId}`, { method: "DELETE" });
+      if (res.ok) loadAsset();
+    } catch (e) { console.error(e); }
+  }
 
   const riskColor = (score: number) => {
     if (score >= 75) return "text-red-400";
@@ -127,20 +191,90 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
             <Link href="/assets" className="text-sm text-slate-400 hover:text-slate-300 flex items-center gap-1 mb-2">
               <ArrowLeft className="w-4 h-4" /> Back to Assets
             </Link>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Server className="w-7 h-7 text-cyan-400" />
-              {asset.name}
-            </h1>
-            <div className="flex items-center gap-3 mt-2">
-              <Badge variant="outline">{typeIcons[asset.type] || asset.type}</Badge>
-              <Badge variant="outline" className={criticalityColors[asset.criticality]}>
-                {asset.criticality} criticality
-              </Badge>
-              <Badge variant={asset.status === "active" ? "success" : "secondary"}>
-                {asset.status}
-              </Badge>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <Server className="w-7 h-7 text-cyan-400" />
+                  {asset.name}
+                </h1>
+                <div className="flex items-center gap-3 mt-2">
+                  <Badge variant="outline">{typeIcons[asset.type] || asset.type}</Badge>
+                  <Badge variant="outline" className={criticalityColors[asset.criticality]}>
+                    {asset.criticality} criticality
+                  </Badge>
+                  <Badge variant={asset.status === "active" ? "success" : "secondary"}>
+                    {asset.status}
+                  </Badge>
+                </div>
+              </div>
+              <Gate capability="asset.edit">
+                {editing ? (
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSave} disabled={saving}>
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+                      <X className="w-4 h-4 mr-1" /> Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                    <Pencil className="w-4 h-4 mr-1" /> Edit Asset
+                  </Button>
+                )}
+              </Gate>
             </div>
           </div>
+
+          {/* Inline Edit Form */}
+          {editing && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Edit Asset Details</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-xs text-slate-500">Name</label>
+                    <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">Type</label>
+                    <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                      className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2">
+                      {ASSET_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">Criticality</label>
+                    <select value={editForm.criticality} onChange={(e) => setEditForm({ ...editForm, criticality: e.target.value })}
+                      className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 text-white text-sm px-3 py-2">
+                      {CRITICALITY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">IP Address</label>
+                    <Input value={editForm.ipAddress} onChange={(e) => setEditForm({ ...editForm, ipAddress: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">Hostname</label>
+                    <Input value={editForm.hostname} onChange={(e) => setEditForm({ ...editForm, hostname: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">OS</label>
+                    <Input value={editForm.os} onChange={(e) => setEditForm({ ...editForm, os: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">Owner</label>
+                    <Input value={editForm.assetOwner} onChange={(e) => setEditForm({ ...editForm, assetOwner: e.target.value })} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">Physical Location</label>
+                    <Input value={editForm.physicalLocation} onChange={(e) => setEditForm({ ...editForm, physicalLocation: e.target.value })} className="mt-1" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Info Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -218,20 +352,33 @@ export default function AssetDetailPage({ params }: { params: Promise<{ id: stri
                   <p className="text-white mt-1">{asset.groupName || "Ungrouped"}</p>
                 </div>
               </div>
-              {asset.tags.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-slate-500 text-sm mb-2 flex items-center gap-1">
-                    <Tag className="w-3 h-3" /> Tags
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {asset.tags.map((tag) => (
-                      <Badge key={tag.id} variant="outline" className="text-xs">
-                        {tag.key}: {tag.value}
-                      </Badge>
-                    ))}
-                  </div>
+              <div className="mt-4">
+                <p className="text-slate-500 text-sm mb-2 flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Tags
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {asset.tags.map((tag) => (
+                    <Badge key={tag.id} variant="outline" className="text-xs flex items-center gap-1">
+                      {tag.key}: {tag.value}
+                      <Gate capability="asset.edit">
+                        <button onClick={() => handleRemoveTag(tag.id)} className="ml-1 hover:text-red-400 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Gate>
+                    </Badge>
+                  ))}
+                  {asset.tags.length === 0 && <span className="text-xs text-slate-600">No tags</span>}
                 </div>
-              )}
+                <Gate capability="asset.edit">
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input placeholder="Key" value={newTagKey} onChange={(e) => setNewTagKey(e.target.value)} className="w-28 h-8 text-xs" />
+                    <Input placeholder="Value" value={newTagValue} onChange={(e) => setNewTagValue(e.target.value)} className="w-28 h-8 text-xs" />
+                    <Button size="sm" variant="outline" onClick={handleAddTag} disabled={addingTag || !newTagKey || !newTagValue} className="h-8 text-xs">
+                      {addingTag ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />} Add Tag
+                    </Button>
+                  </div>
+                </Gate>
+              </div>
             </CardContent>
           </Card>
 

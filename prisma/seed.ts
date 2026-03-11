@@ -1508,6 +1508,23 @@ async function main() {
     alertIds.push(created.id);
   }
 
+  // ── Update rule counters (lastTriggeredAt, truePositiveCount) ──
+  // Count alerts per rule and update metrics so testers see realistic data
+  const alertCountByRule: Record<string, number> = {};
+  for (const a of alertDefs) {
+    const rule = ruleByName(a.ruleName);
+    alertCountByRule[rule.id] = (alertCountByRule[rule.id] || 0) + 1;
+  }
+  for (const [ruleId, count] of Object.entries(alertCountByRule)) {
+    await prisma.siemRule.update({
+      where: { id: ruleId },
+      data: {
+        lastTriggeredAt: new Date(Date.now() - 30 * 60000),
+        truePositiveCount: count,
+      },
+    });
+  }
+
   // ── 5 Incidents ──
   const incidentDefs = [
     {

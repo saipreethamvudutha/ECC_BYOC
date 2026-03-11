@@ -147,7 +147,15 @@ export default function SessionsPage() {
   const handleRevokeAll = async () => {
     setRevokingAll(true);
     try {
-      const res = await fetch("/api/auth/sessions/revoke-all", { method: "POST" });
+      // Find current session ID by user agent to exclude it from revocation
+      const currentSession = mySessions.find((s) => currentUA && s.userAgent === currentUA);
+      const res = await fetch("/api/auth/sessions/revoke-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          excludeSessionId: currentSession?.id,
+        }),
+      });
       if (res.ok) {
         await fetchMySessions();
         if (isAdmin) await fetchAdminSessions();

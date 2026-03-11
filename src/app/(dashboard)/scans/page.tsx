@@ -22,6 +22,9 @@ import {
   AlertTriangle,
   Plus,
   RefreshCw,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
@@ -56,11 +59,15 @@ const typeLabels: Record<string, string> = {
   discovery: "Asset Discovery",
 };
 
+const PAGE_SIZE = 20;
+
 export default function ScansPage() {
   const [scans, setScans] = useState<ScanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewScan, setShowNewScan] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const router = useRouter();
   const [scanForm, setScanForm] = useState({
     name: "",
@@ -81,7 +88,28 @@ export default function ScansPage() {
 
   useEffect(() => {
     loadScans();
+    // Auto-refresh every 15s to pick up running scan status changes
+    const interval = setInterval(loadScans, 15000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Pagination
+  const totalPages = Math.ceil(scans.length / PAGE_SIZE);
+  const paginatedScans = scans.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  async function handleDeleteScan(scanId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm("Delete this scan and all its findings? This cannot be undone.")) return;
+    setDeleting(scanId);
+    try {
+      const res = await fetch(`/api/scans/${scanId}`, { method: "DELETE" });
+      if (res.ok) loadScans();
+    } catch (error) {
+      console.error("Delete scan error:", error);
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   async function handleCreateScan() {
     if (!scanForm.name || !scanForm.targets) return;
@@ -172,7 +200,7 @@ export default function ScansPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {scans.map((scan) => {
+            {paginatedScans.map((scan) => {
               const config = statusConfig[scan.status] || statusConfig.queued;
               const StatusIcon = config.icon;
               return (
@@ -193,15 +221,27 @@ export default function ScansPage() {
                       Targets: {scan.targets.join(", ")} | {scan.resultsCount} findings
                     </p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <Badge variant={config.badge}>{scan.status}</Badge>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      {scan.completedAt
-                        ? formatDateTime(scan.completedAt)
-                        : scan.startedAt
-                        ? `Started ${formatDateTime(scan.startedAt)}`
-                        : formatDateTime(scan.createdAt)}
-                    </p>
+                  <div className="text-right flex-shrink-0 flex items-center gap-3">
+                    <div>
+                      <Badge variant={config.badge}>{scan.status}</Badge>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {scan.completedAt
+                          ? formatDateTime(scan.completedAt)
+                          : scan.startedAt
+                          ? `Started ${formatDateTime(scan.startedAt)}`
+                          : formatDateTime(scan.createdAt)}
+                      </p>
+                    </div>
+                    <Gate capability="scan.create">
+                      <button
+                        className="p-1.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                        title="Delete scan"
+                        onClick={(e) => handleDeleteScan(scan.id, e)}
+                        disabled={deleting === scan.id}
+                      >
+                        {deleting === scan.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </Gate>
                   </div>
                 </div>
               );
@@ -213,6 +253,24 @@ export default function ScansPage() {
               </div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-500">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, scans.length)} of {scans.length} scans
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm text-slate-400">Page {currentPage} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

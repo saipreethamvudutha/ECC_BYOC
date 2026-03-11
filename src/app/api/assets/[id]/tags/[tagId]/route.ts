@@ -14,11 +14,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allowed = await rbac.checkPermission(
-    session.id, session.tenantId, "asset.tag.manage"
-  );
+  const allowed = await rbac.checkCapability(session.id, session.tenantId, "asset.edit");
   if (!allowed) {
-    return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id, tagId } = await params;

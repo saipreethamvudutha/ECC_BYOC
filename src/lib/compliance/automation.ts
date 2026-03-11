@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/audit";
 
 // ─── Scanner Check → Compliance Control Mapping ──────────────────
 
@@ -226,6 +227,24 @@ export async function updateComplianceFromScan(
         }
       }
     }
+  }
+
+  // Create audit trail for compliance automation
+  if (updated > 0) {
+    await createAuditLog({
+      tenantId,
+      actorId: "system",
+      actorType: "system",
+      action: "compliance.auto_assessed",
+      resourceType: "scan",
+      resourceId: scanId,
+      result: "success",
+      details: {
+        controlsUpdated: updated,
+        assessmentsCreated: assessments,
+        checkModules: Object.keys(findingsByModule).filter((m) => SCAN_TO_COMPLIANCE_MAP[m]),
+      },
+    });
   }
 
   return { updated, assessments };
