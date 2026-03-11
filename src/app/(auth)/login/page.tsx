@@ -249,7 +249,7 @@ function LoginForm() {
                 <label className="text-sm font-medium text-slate-300">Email</label>
                 <Input
                   type="email"
-                  placeholder="admin@exargen.com"
+                  placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
