@@ -775,6 +775,19 @@ export default function UsersPage() {
                             <Target className="w-3.5 h-3.5" />
                             Manage Scopes
                           </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-xs text-amber-400 hover:bg-slate-700/50 flex items-center gap-2 transition-colors"
+                            onClick={async () => {
+                              setOpenMenuId(null);
+                              try {
+                                const res = await fetch(`/api/admin/users/${user.id}/reset-lockout`, { method: "POST" });
+                                if (res.ok) loadUsers();
+                              } catch (e) { console.error(e); }
+                            }}
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Reset Lockout
+                          </button>
                           <div className="border-t border-slate-700 my-1" />
                           {user.status === "suspended" ? (
                             <button

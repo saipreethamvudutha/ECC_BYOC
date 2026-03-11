@@ -39,7 +39,7 @@ export async function GET() {
     }),
     prisma.scan.count({ where: { tenantId, status: { in: ["running", "queued"] } } }),
     prisma.siemAlert.count({ where: { tenantId, status: { in: ["open", "investigating"] } } }),
-    prisma.aiAction.count({ where: { tenantId, status: "pending" } }),
+    prisma.aiAction.count({ where: { tenantId, status: "pending" } }).catch(() => 0),
     prisma.complianceControl.groupBy({
       by: ["status"],
       where: { tenantId },

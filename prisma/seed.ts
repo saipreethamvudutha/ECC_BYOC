@@ -213,18 +213,18 @@ async function main() {
   console.log("💻 Seeding assets...");
 
   const assetDefinitions = [
-    { name: "exg-web-prod-01", type: "server", hostname: "exg-web-prod-01.exargen.io", ipAddress: "10.0.1.10", os: "Ubuntu 22.04 LTS", criticality: "critical", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
-    { name: "exg-web-prod-02", type: "server", hostname: "exg-web-prod-02.exargen.io", ipAddress: "10.0.1.11", os: "Ubuntu 22.04 LTS", criticality: "critical", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
-    { name: "exg-api-prod-01", type: "server", hostname: "exg-api-prod-01.exargen.io", ipAddress: "10.0.2.10", os: "Ubuntu 22.04 LTS", criticality: "critical", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
-    { name: "exg-db-prod-01", type: "database", hostname: "exg-db-prod-01.exargen.io", ipAddress: "10.0.3.10", os: "PostgreSQL 16", criticality: "critical", tags: ["env:production", "region:us-east-1", "team:data", "criticality:tier-1"] },
-    { name: "exg-web-staging-01", type: "server", hostname: "exg-web-staging-01.exargen.io", ipAddress: "10.1.1.10", os: "Ubuntu 22.04 LTS", criticality: "medium", tags: ["env:staging", "region:us-east-1", "team:platform"] },
-    { name: "exg-api-staging-01", type: "server", hostname: "exg-api-staging-01.exargen.io", ipAddress: "10.1.2.10", os: "Ubuntu 22.04 LTS", criticality: "medium", tags: ["env:staging", "region:us-east-1", "team:platform"] },
-    { name: "exg-siem-prod-01", type: "server", hostname: "exg-siem-prod-01.exargen.io", ipAddress: "10.0.5.10", os: "CentOS 8", criticality: "high", tags: ["env:production", "region:us-east-1", "team:security", "criticality:tier-1"] },
-    { name: "exg-fw-prod-01", type: "network_device", hostname: "exg-fw-prod-01.exargen.io", ipAddress: "10.0.0.1", os: "Palo Alto PAN-OS 11", criticality: "critical", tags: ["env:production", "region:us-east-1", "team:security", "criticality:tier-1"] },
-    { name: "exg-vpn-eu-01", type: "network_device", hostname: "exg-vpn-eu-01.exargen.io", ipAddress: "10.2.0.1", os: "WireGuard", criticality: "high", tags: ["env:production", "region:eu-west-1", "team:security", "criticality:tier-2"] },
-    { name: "exg-web-eu-01", type: "server", hostname: "exg-web-eu-01.exargen.io", ipAddress: "10.2.1.10", os: "Ubuntu 22.04 LTS", criticality: "high", tags: ["env:production", "region:eu-west-1", "team:platform", "criticality:tier-2"] },
-    { name: "exg-app-dev-01", type: "cloud_resource", hostname: "exg-app-dev-01.exargen.io", ipAddress: "10.3.1.10", os: "AWS ECS Fargate", criticality: "low", tags: ["env:development", "region:ap-south-1", "team:platform"] },
-    { name: "exg-ml-data-01", type: "server", hostname: "exg-ml-data-01.exargen.io", ipAddress: "10.0.6.10", os: "Ubuntu 22.04 LTS", criticality: "high", tags: ["env:production", "region:us-east-1", "team:data", "criticality:tier-2"] },
+    { name: "exg-web-prod-01", type: "server", hostname: "exg-web-prod-01.exargen.io", ipAddress: "10.0.1.10", os: "Ubuntu 22.04 LTS", criticality: "critical", assetOwner: "Platform Engineering", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
+    { name: "exg-web-prod-02", type: "server", hostname: "exg-web-prod-02.exargen.io", ipAddress: "10.0.1.11", os: "Ubuntu 22.04 LTS", criticality: "critical", assetOwner: "Platform Engineering", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
+    { name: "exg-api-prod-01", type: "server", hostname: "exg-api-prod-01.exargen.io", ipAddress: "10.0.2.10", os: "Ubuntu 22.04 LTS", criticality: "critical", assetOwner: "Platform Engineering", tags: ["env:production", "region:us-east-1", "team:platform", "criticality:tier-1"] },
+    { name: "exg-db-prod-01", type: "database", hostname: "exg-db-prod-01.exargen.io", ipAddress: "10.0.3.10", os: "PostgreSQL 16", criticality: "critical", assetOwner: "Data Engineering", tags: ["env:production", "region:us-east-1", "team:data", "criticality:tier-1"] },
+    { name: "exg-web-staging-01", type: "server", hostname: "exg-web-staging-01.exargen.io", ipAddress: "10.1.1.10", os: "Ubuntu 22.04 LTS", criticality: "medium", assetOwner: "Platform Engineering", tags: ["env:staging", "region:us-east-1", "team:platform"] },
+    { name: "exg-api-staging-01", type: "server", hostname: "exg-api-staging-01.exargen.io", ipAddress: "10.1.2.10", os: "Ubuntu 22.04 LTS", criticality: "medium", assetOwner: "Platform Engineering", tags: ["env:staging", "region:us-east-1", "team:platform"] },
+    { name: "exg-siem-prod-01", type: "server", hostname: "exg-siem-prod-01.exargen.io", ipAddress: "10.0.5.10", os: "CentOS 8", criticality: "high", assetOwner: "Security Operations", tags: ["env:production", "region:us-east-1", "team:security", "criticality:tier-1"] },
+    { name: "exg-fw-prod-01", type: "network_device", hostname: "exg-fw-prod-01.exargen.io", ipAddress: "10.0.0.1", os: "Palo Alto PAN-OS 11", criticality: "critical", assetOwner: "Security Operations", tags: ["env:production", "region:us-east-1", "team:security", "criticality:tier-1"] },
+    { name: "exg-vpn-eu-01", type: "network_device", hostname: "exg-vpn-eu-01.exargen.io", ipAddress: "10.2.0.1", os: "WireGuard", criticality: "high", assetOwner: "Security Operations", tags: ["env:production", "region:eu-west-1", "team:security", "criticality:tier-2"] },
+    { name: "exg-web-eu-01", type: "server", hostname: "exg-web-eu-01.exargen.io", ipAddress: "10.2.1.10", os: "Ubuntu 22.04 LTS", criticality: "high", assetOwner: "EU Operations", tags: ["env:production", "region:eu-west-1", "team:platform", "criticality:tier-2"] },
+    { name: "exg-app-dev-01", type: "cloud_resource", hostname: "exg-app-dev-01.exargen.io", ipAddress: "10.3.1.10", os: "AWS ECS Fargate", criticality: "low", assetOwner: "DevOps", tags: ["env:development", "region:ap-south-1", "team:platform"] },
+    { name: "exg-ml-data-01", type: "server", hostname: "exg-ml-data-01.exargen.io", ipAddress: "10.0.6.10", os: "Ubuntu 22.04 LTS", criticality: "high", assetOwner: "Data Engineering", tags: ["env:production", "region:us-east-1", "team:data", "criticality:tier-2"] },
   ];
 
   for (const assetDef of assetDefinitions) {
@@ -244,6 +244,7 @@ async function main() {
           ipAddress: assetDef.ipAddress,
           os: assetDef.os,
           criticality: assetDef.criticality,
+          assetOwner: assetDef.assetOwner || null,
           status: "active",
         },
       });
@@ -257,6 +258,7 @@ async function main() {
           ipAddress: assetDef.ipAddress,
           os: assetDef.os,
           criticality: assetDef.criticality,
+          assetOwner: assetDef.assetOwner || null,
         },
       });
     }
@@ -861,8 +863,19 @@ async function main() {
   ];
 
   for (const ctrl of allControls) {
-    await prisma.complianceControl.create({
-      data: {
+    await prisma.complianceControl.upsert({
+      where: {
+        frameworkId_controlId: {
+          frameworkId: ctrl.frameworkId,
+          controlId: ctrl.controlId,
+        },
+      },
+      update: {
+        title: ctrl.title,
+        category: ctrl.category,
+        status: ctrl.status,
+      },
+      create: {
         id: uuid(),
         tenantId: tenant.id,
         frameworkId: ctrl.frameworkId,

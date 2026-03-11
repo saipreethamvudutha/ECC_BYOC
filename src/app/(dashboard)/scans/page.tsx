@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
+import { Gate } from "@/components/rbac/Gate";
 import { useRouter } from "next/navigation";
 
 interface ScanItem {
@@ -135,10 +136,12 @@ export default function ScansPage() {
             <RefreshCw className="w-4 h-4 mr-1" />
             Refresh
           </Button>
-          <Button onClick={() => setShowNewScan(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Scan
-          </Button>
+          <Gate capability="scan.create">
+            <Button onClick={() => setShowNewScan(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Scan
+            </Button>
+          </Gate>
         </div>
       </div>
 

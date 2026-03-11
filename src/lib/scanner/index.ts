@@ -117,6 +117,11 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
         }
       } catch (error) {
         console.error(`Check ${check.id} failed on ${target}:`, error);
+        // Track errors in progress for unreachable target detection
+        if (!progress.checkResults[`_errors_${check.id}`]) {
+          progress.checkResults[`_errors_${check.id}`] = 0;
+        }
+        (progress.checkResults[`_errors_${check.id}`] as number)++;
       }
     }
 
@@ -169,21 +174,28 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
   // 6. Save progress to DB
   const allDone = progress.completedChecks.length >= allChecks.length;
 
+  // Detect if all checks errored with no findings (unreachable target)
+  const totalErrors = Object.keys(progress.checkResults)
+    .filter(k => k.startsWith("_errors_"))
+    .reduce((sum, k) => sum + (progress.checkResults[k] as number), 0);
+  const allErrored = allDone && progress.totalFindings === 0 && totalErrors > 0;
+  const finalStatus = allDone ? (allErrored ? "failed" : "completed") : "running";
+
   await prisma.scan.update({
     where: { id: scanId },
     data: {
-      status: allDone ? "completed" : "running",
+      status: finalStatus,
       completedAt: allDone ? new Date() : undefined,
       progress: JSON.stringify(progress),
     },
   });
 
-  if (allDone) {
+  if (allDone && !allErrored) {
     await runPostScanHooks(scanId, scan.tenantId);
   }
 
   return {
-    status: allDone ? "completed" : "running",
+    status: finalStatus,
     progress,
     newFindings,
   };

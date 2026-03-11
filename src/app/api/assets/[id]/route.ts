@@ -214,3 +214,47 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+// ── DELETE: Remove asset ──────────────────────────────────────────
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const canDelete = await rbac.checkCapability(session.id, session.tenantId, "asset.delete");
+  if (!canDelete) {
+    return NextResponse.json({ error: "Forbidden: requires asset.delete capability" }, { status: 403 });
+  }
+
+  const { id } = await params;
+
+  const existing = await prisma.asset.findFirst({
+    where: { id, tenantId: session.tenantId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+  }
+
+  // Delete related records first
+  await prisma.assetTag.deleteMany({ where: { assetId: id } });
+  await prisma.scanResult.deleteMany({ where: { assetId: id } });
+  await prisma.asset.delete({ where: { id } });
+
+  await createAuditLog({
+    tenantId: session.tenantId,
+    actorId: session.id,
+    actorType: "user",
+    action: "asset.deleted",
+    resourceType: "asset",
+    resourceId: id,
+    result: "success",
+    details: { name: existing.name, type: existing.type },
+    request,
+  });
+
+  return NextResponse.json({ success: true });
+}

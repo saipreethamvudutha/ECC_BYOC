@@ -273,6 +273,80 @@ function MFASection() {
   );
 }
 
+function PasswordChangeSection() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleChangePassword() {
+    if (!currentPassword || !newPassword) return;
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: "error", text: "New passwords do not match" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      setMessage({ type: "error", text: "New password must be at least 8 characters" });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: "Password changed successfully" });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to change password" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Key className="w-5 h-5 text-cyan-400" />
+          Change Password
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">Current Password</label>
+          <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Enter current password" />
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">New Password</label>
+          <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password (min 8 chars)" />
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">Confirm New Password</label>
+          <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+        </div>
+        {message && (
+          <p className={cn("text-xs", message.type === "success" ? "text-emerald-400" : "text-red-400")}>{message.text}</p>
+        )}
+        <Button onClick={handleChangePassword} disabled={saving || !currentPassword || !newPassword}>
+          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          Change Password
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SecurityDashboardPage() {
   const router = useRouter();
 
@@ -622,6 +696,9 @@ export default function SecurityDashboardPage() {
 
       {/* MFA Section */}
       <MFASection />
+
+      {/* Password Change Section */}
+      <PasswordChangeSection />
 
       {/* Stat Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

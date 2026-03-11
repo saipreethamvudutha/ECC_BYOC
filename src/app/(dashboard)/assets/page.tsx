@@ -5,6 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Server,
   Monitor,
   Network,
@@ -17,9 +25,13 @@ import {
   Tag,
   ChevronDown,
   X,
+  Trash2,
+  Filter,
+  Loader2,
 } from "lucide-react";
 import { cn, formatDateTime } from "@/lib/utils";
 import { PageGate } from "@/components/rbac/PageGate";
+import { Gate } from "@/components/rbac/Gate";
 import { useRouter } from "next/navigation";
 
 interface AssetTag {
@@ -77,14 +89,27 @@ const statusVariants: Record<string, "success" | "secondary" | "destructive"> = 
   decommissioned: "destructive",
 };
 
+const ASSET_TYPES = ["server", "workstation", "network_device", "cloud_resource", "application", "database", "iot_device", "mobile_device", "virtual_machine", "container", "firewall", "load_balancer"];
+const CRITICALITY_LEVELS = ["critical", "high", "medium", "low"];
+
 export default function AssetsPage() {
   const router = useRouter();
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedCriticality, setSelectedCriticality] = useState<string | null>(null);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const [showAddAsset, setShowAddAsset] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<AssetItem | null>(null);
+  const [assetForm, setAssetForm] = useState({
+    name: "", type: "server", ipAddress: "", hostname: "", os: "",
+    criticality: "medium", description: "",
+  });
 
   // Close tag dropdown on outside click
   useEffect(() => {
@@ -102,7 +127,7 @@ export default function AssetsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [tagDropdownOpen]);
 
-  useEffect(() => {
+  function loadAssets() {
     fetch("/api/assets")
       .then((res) => {
         if (!res.ok) return [];
@@ -111,7 +136,47 @@ export default function AssetsPage() {
       .then((data) => setAssets(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadAssets();
   }, []);
+
+  async function handleCreateAsset() {
+    if (!assetForm.name) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/assets/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(assetForm),
+      });
+      if (res.ok) {
+        setShowAddAsset(false);
+        setAssetForm({ name: "", type: "server", ipAddress: "", hostname: "", os: "", criticality: "medium", description: "" });
+        loadAssets();
+      }
+    } catch (e) {
+      console.error("Create asset error:", e);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteAsset(id: string) {
+    setDeleting(id);
+    try {
+      const res = await fetch(`/api/assets/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setShowDeleteConfirm(null);
+        loadAssets();
+      }
+    } catch (e) {
+      console.error("Delete asset error:", e);
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   // Collect all unique tags from loaded assets
   const uniqueTags = Array.from(
@@ -130,7 +195,9 @@ export default function AssetsPage() {
     const matchesTag =
       !selectedTag ||
       (a.assetTags || []).some((t) => `${t.key}:${t.value}` === selectedTag);
-    return matchesSearch && matchesTag;
+    const matchesType = !selectedType || a.type === selectedType;
+    const matchesCriticality = !selectedCriticality || a.criticality === selectedCriticality;
+    return matchesSearch && matchesTag && matchesType && matchesCriticality;
   });
 
   const activeCount = assets.filter((a) => a.status === "active").length;
@@ -166,10 +233,12 @@ export default function AssetsPage() {
             Manage and monitor all assets across your organization
           </p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Asset
-        </Button>
+        <Gate capability="asset.create">
+          <Button onClick={() => setShowAddAsset(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Asset
+          </Button>
+        </Gate>
       </div>
 
       {/* Summary Stats */}
@@ -193,9 +262,9 @@ export default function AssetsPage() {
         ))}
       </div>
 
-      {/* Search & Tag Filter */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+      {/* Search & Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             type="text"
@@ -205,6 +274,30 @@ export default function AssetsPage() {
             className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
           />
         </div>
+
+        {/* Type Filter */}
+        <select
+          value={selectedType || ""}
+          onChange={(e) => setSelectedType(e.target.value || null)}
+          className="px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-slate-300 focus:outline-none focus:border-cyan-500/50"
+        >
+          <option value="">All Types</option>
+          {ASSET_TYPES.map((t) => (
+            <option key={t} value={t}>{typeLabels[t] || t.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>
+          ))}
+        </select>
+
+        {/* Criticality Filter */}
+        <select
+          value={selectedCriticality || ""}
+          onChange={(e) => setSelectedCriticality(e.target.value || null)}
+          className="px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-slate-300 focus:outline-none focus:border-cyan-500/50"
+        >
+          <option value="">All Criticality</option>
+          {CRITICALITY_LEVELS.map((c) => (
+            <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+          ))}
+        </select>
 
         {/* Tag Filter Dropdown */}
         <div className="relative" ref={tagDropdownRef}>
@@ -400,6 +493,82 @@ export default function AssetsPage() {
       </Card>
     </div>
     )}
+
+    {/* Add Asset Dialog */}
+    <Dialog open={showAddAsset} onOpenChange={setShowAddAsset}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add New Asset</DialogTitle>
+          <DialogDescription>Add a new asset to your inventory.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Name *</label>
+            <input value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50" placeholder="e.g. web-server-01" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Type</label>
+              <select value={assetForm.type} onChange={(e) => setAssetForm({ ...assetForm, type: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50">
+                {ASSET_TYPES.map((t) => (
+                  <option key={t} value={t}>{typeLabels[t] || t.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Criticality</label>
+              <select value={assetForm.criticality} onChange={(e) => setAssetForm({ ...assetForm, criticality: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50">
+                {CRITICALITY_LEVELS.map((c) => (
+                  <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">IP Address</label>
+              <input value={assetForm.ipAddress} onChange={(e) => setAssetForm({ ...assetForm, ipAddress: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50" placeholder="192.168.1.1" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Hostname</label>
+              <input value={assetForm.hostname} onChange={(e) => setAssetForm({ ...assetForm, hostname: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50" placeholder="web-server-01.local" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Operating System</label>
+            <input value={assetForm.os} onChange={(e) => setAssetForm({ ...assetForm, os: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50" placeholder="Ubuntu 22.04 LTS" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Description</label>
+            <input value={assetForm.description} onChange={(e) => setAssetForm({ ...assetForm, description: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-500/50" placeholder="Production web server" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowAddAsset(false)}>Cancel</Button>
+          <Button onClick={handleCreateAsset} disabled={creating || !assetForm.name}>
+            {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+            Create Asset
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete Confirmation Dialog */}
+    <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete Asset</DialogTitle>
+          <DialogDescription>Are you sure you want to delete &quot;{showDeleteConfirm?.name}&quot;? This action cannot be undone.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={() => showDeleteConfirm && handleDeleteAsset(showDeleteConfirm.id)} disabled={!!deleting}>
+            {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </PageGate>
   );
 }
