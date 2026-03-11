@@ -296,11 +296,6 @@ function LoginForm() {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-slate-800">
-              <p className="text-xs text-slate-500 text-center">
-                Login: admin@exargen.com / Admin123!
-              </p>
-            </div>
           </>
         )}
       </div>
