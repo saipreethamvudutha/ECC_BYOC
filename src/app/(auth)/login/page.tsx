@@ -211,7 +211,7 @@ function LoginForm() {
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-white">Welcome back</h2>
               <p className="text-sm text-slate-400 mt-1">
-                Sign in to your security operations center
+                Sign in to continue
               </p>
             </div>
 
