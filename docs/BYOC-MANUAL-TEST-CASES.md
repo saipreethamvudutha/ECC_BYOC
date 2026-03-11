@@ -1,7 +1,7 @@
 # BYOC Platform - Detailed Manual Test Cases
 
-**Version:** 1.0
-**Date:** 2026-03-05
+**Version:** 2.0
+**Date:** 2026-03-10
 **Tester:** _______________
 **Environment:** _______________
 **Build/Commit:** _______________
@@ -1573,6 +1573,332 @@ These tests verify that role-based access control works across the entire platfo
 
 ---
 
+# MODULE 21: DETECTION ENGINE & OPERATIONAL MATURITY (PHASE 11)
+
+---
+
+## TC-P11-001: Event Ingestion — Single Event
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin@exargen.com. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | Open browser DevTools > Console. | Console is open and ready for input. | |
+| 2 | Run: `fetch('/api/siem/events', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ source: 'endpoint', severity: 'high', category: 'process', title: 'Test PowerShell event', processName: 'powershell.exe', hostName: 'TEST-WS-01' }) }).then(r => r.json()).then(console.log)` | Promise resolves and response is logged to the console. | |
+| 3 | Check the response in console. | Response has status 200, body contains `event.id` (UUID), and `alerts` array. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-002: Detection Rule Triggers Alert
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin. 12 seeded rules active. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST to `/api/siem/events` with body: `{ "source": "endpoint", "severity": "high", "category": "process", "title": "Suspicious PowerShell", "processName": "powershell.exe", "details": { "commandLine": "powershell.exe -EncodedCommand SGVsbG8=" } }` | Response returns 200 with event data. | |
+| 2 | Check response `alerts` array. | At least 1 alert with `ruleName` containing "PowerShell" and `mitreAttackId` "T1059.001". | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-003: Batch Event Ingestion
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST to `/api/siem/events/batch` with body: `{ "events": [{"source":"firewall", "severity":"low", "category":"network", "title":"Test 1"}, {"source":"firewall", "severity":"medium", "category":"network", "title":"Test 2"}, {"source":"firewall", "severity":"high", "category":"network", "title":"Test 3"}] }` | Response returns 200. | |
+| 2 | Check response body. | Response contains `ingested: 3`. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-004: Batch Rejects Over 100 Events
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST to `/api/siem/events/batch` with an array of 101 events. | Response returns **400** status with error message about maximum batch size exceeded. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-005: RBAC — Viewer Cannot Ingest Events
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as viewer@exargen.com / Viewer123! |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST to `/api/siem/events` with a valid event body (e.g., `{ "source": "endpoint", "severity": "low", "category": "process", "title": "Viewer test" }`). | Response returns **403 Forbidden**. Event is NOT created. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-006: Alert Tuning — False Positive
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. At least one alert exists linked to a rule. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/siem?tab=rules`, note a rule's `falsePositiveCount`. | Rule data returned with current `falsePositiveCount` value. | |
+| 2 | Find an alert linked to that rule. PATCH `/api/siem/alerts/{id}` with body: `{ "status": "false_positive" }` | Response returns 200. Alert status updated to "false_positive". | |
+| 3 | GET the same rule again. | Rule's `falsePositiveCount` is incremented by 1 compared to step 1. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-007: AI Action — Execute Without Approval Fails
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin. A pending AI action exists. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/ai-actions`, find one with status "pending". Note its `id`. | At least one pending AI action found. | |
+| 2 | POST `/api/ai-actions/{id}` with body: `{ "action": "execute" }` | Response returns **400** error — action must be approved first before execution. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-008: AI Action — Approve Then Execute
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin. A pending AI action exists. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST `/api/ai-actions/{id}` with body: `{ "action": "approve" }` | Response returns **200**. Action status changes to "approved". | |
+| 2 | POST `/api/ai-actions/{id}` with body: `{ "action": "execute" }` | Response returns **200**. Action status changes to "executed". | |
+| 3 | GET `/api/ai-actions/{id}`, check the `config` field. | Status is "executed". `config` contains `executionResult`. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-009: Report Completes Synchronously
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST `/api/reports/generate` with body: `{ "type": "vulnerability" }` | Response returns 200. | |
+| 2 | Check the response body. | Response has `status: "completed"` (NOT "generating"). Report is fully generated synchronously. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-010: Report CSV Export
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | A completed report exists. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST `/api/reports/generate` with body: `{ "type": "compliance" }`, note the `id` from response. | Report created with status "completed". `id` is returned. | |
+| 2 | GET `/api/reports/{id}/download?format=csv` | Response returns CSV text with "Section,Metric,Value" header row. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-011: Report JSON Export
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | A completed report exists (from TC-P11-010 or similar). |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/reports/{id}/download?format=json` | Response returns JSON with `generatedAt` and `summary` fields present. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-012: SOAR Playbooks List
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/soar/playbooks` | Response returns an array of 3 playbooks: "Critical Alert Auto-Escalation", "Brute Force Response", "Ransomware Isolation". | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-013: SOAR Auto-Escalation Pipeline
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin. SOAR playbooks active. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST `/api/siem/events` with a critical severity event that matches a detection rule. | Response returns 200 with event data. | |
+| 2 | Check response for `playbooks` array. | `playbooks` array is present and non-empty, indicating SOAR playbook was triggered. | |
+| 3 | GET `/api/siem/incidents` — verify a new incident was created. | New incident exists corresponding to the critical event, created automatically via SOAR playbook. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-014: Cron Scheduler Auth
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | No special login required. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/cron/scan-scheduler` without an Authorization header. | Response returns **401 Unauthorized**. Cron endpoint is not publicly accessible. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-015: SOC Dashboard Live Indicator
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Medium |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | Navigate to `/siem`. | SIEM / SOC dashboard loads. | |
+| 2 | Look for "Live" or "updated" indicator in the header area. | Live indicator is visible showing auto-refresh status (e.g., pulsing dot, "Live" badge, or "Last updated" timestamp). | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-016: Metrics Endpoint
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | High |
+| **Precondition** | Logged in as admin. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | GET `/api/siem/metrics` | Response returns JSON containing: `mttr`, `mttd`, `openAlerts`, `alertsByStatus`, `alertsBySeverity`. | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
+## TC-P11-017: Full Detection Pipeline
+
+| Field | Detail |
+|-------|--------|
+| **Priority** | Critical |
+| **Precondition** | Logged in as admin. Detection rules and SOAR playbooks active. |
+
+### Steps
+
+| # | Action | Expected Result | Pass/Fail |
+|---|--------|----------------|-----------|
+| 1 | POST `/api/siem/events` with a critical severity event matching a detection rule. | Response returns 200 with event data. | |
+| 2 | Verify alert was created in the response `alerts` array. | At least 1 alert is present with rule name and MITRE ATT&CK ID. | |
+| 3 | If SOAR triggers, verify incident in GET `/api/siem/incidents`. | Full detection pipeline confirmed: Event → rule match → alert → SOAR escalation → incident (full chain). | |
+
+**Result:** PASS [ ] FAIL [ ] BLOCKED [ ]
+**Notes:** _______________
+
+---
+
 # TEST EXECUTION SUMMARY
 
 ## Quick Totals
@@ -1596,7 +1922,8 @@ These tests verify that role-based access control works across the entire platfo
 | 15. Invitation & Onboarding | 3 | | | |
 | 16. RBAC Enforcement | 4 | | | |
 | 17. Security Edge Cases | 3 | | | |
-| **TOTAL** | **64** | | | |
+| 21. Detection Engine & Operational Maturity (Phase 11) | 17 | | | |
+| **TOTAL** | **81** | | | |
 
 ## Sign-Off
 
@@ -1628,6 +1955,10 @@ Execute tests in this order for the smoothest flow (each module builds on the pr
 14. **TC-SECDASH-001** (security dashboard)
 15. **TC-RBAC-001** through **TC-RBAC-004** (RBAC enforcement - needs users from earlier tests)
 16. **TC-SEC-001** through **TC-SEC-003** (security edge cases - run last)
+17. **TC-P11-001** through **TC-P11-005** (event ingestion + RBAC enforcement)
+18. **TC-P11-006** through **TC-P11-008** (alert tuning + AI actions)
+19. **TC-P11-009** through **TC-P11-011** (reports)
+20. **TC-P11-012** through **TC-P11-017** (SOAR, scheduling, dashboard, full pipeline)
 
 ---
 

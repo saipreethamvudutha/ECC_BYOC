@@ -1,7 +1,7 @@
 # BYOC Cybersecurity Platform - End-to-End Test Plan
 
-**Version:** 1.0
-**Date:** 2026-03-03
+**Version:** 2.0
+**Date:** 2026-03-10
 **Platform:** BYOC (Bring Your Own Cloud)
 **Environment:** https://byoc-rosy.vercel.app (Production) / http://localhost:3000 (Local)
 **Test Account:** admin@exargen.com / Admin123!
@@ -31,8 +31,9 @@
 19. [Module 18: RBAC Enforcement (Cross-Cutting)](#19-module-18-rbac-enforcement-cross-cutting)
 20. [Module 19: Security & Edge Cases](#20-module-19-security--edge-cases)
 21. [Module 20: API-Level Testing](#21-module-20-api-level-testing)
-22. [Automated E2E Testing Strategy](#22-automated-e2e-testing-strategy)
-23. [Test Execution Tracker](#23-test-execution-tracker)
+22. [Module 21: Detection Engine & Operational Maturity (Phase 11)](#22-module-21-detection-engine--operational-maturity-phase-11)
+23. [Automated E2E Testing Strategy](#23-automated-e2e-testing-strategy)
+24. [Test Execution Tracker](#24-test-execution-tracker)
 
 ---
 
@@ -1300,7 +1301,72 @@ These tests are performed directly against the API using DevTools, curl, or Post
 
 ---
 
-## 22. Automated E2E Testing Strategy
+## 22. Module 21: Detection Engine & Operational Maturity (Phase 11)
+
+Tests the live detection pipeline: event ingestion, rule evaluation, SOAR playbooks, compliance automation, AI action execution, report export, and scan scheduling.
+
+### Event Ingestion API
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-001 | POST single event with valid data | Critical | 200 with event.id |
+| TC-P11-002 | POST event triggers process_match rule | Critical | Alerts array contains PowerShell match with MITRE T1059.001 |
+| TC-P11-003 | POST batch events (3) returns correct count | Critical | 200 with ingested=3 |
+| TC-P11-004 | Batch rejects > 100 events | High | 400 error |
+| TC-P11-005 | Events appear in GET /api/siem?tab=events | High | Event title found in response |
+| TC-P11-006 | Viewer cannot POST events (403) | Critical | 403 Forbidden |
+
+### Rule Tuning Feedback
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-007 | false_positive increments falsePositiveCount | High | Rule.falsePositiveCount > before |
+| TC-P11-008 | resolved increments truePositiveCount | High | Rule.truePositiveCount > before |
+
+### AI Action Execution
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-009 | Execute unapproved action returns 400 | Critical | 400 error |
+| TC-P11-010 | Approve then execute creates execution result | Critical | executionResult present in response |
+
+### Report Generation & Export
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-011 | Report completes synchronously | High | status="completed" immediately |
+| TC-P11-012 | CSV download returns proper format | High | Response contains "Section" and "Metric" headers |
+| TC-P11-013 | JSON download returns structured data | High | Response contains generatedAt and summary keys |
+
+### SOAR Playbooks
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-014 | GET /api/soar/playbooks returns 3 playbooks | High | Array of 3 playbooks with names |
+| TC-P11-015 | Critical alert auto-escalated to incident via SOAR | Critical | Incident created, alert linked |
+
+### Scan Scheduling
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-016 | Cron endpoint rejects unauthorized requests | High | 401 without CRON_SECRET |
+
+### SOC Dashboard
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-017 | Metrics endpoint returns all required fields | High | mttr, mttd, openAlerts, alertsByStatus present |
+| TC-P11-018 | SIEM page renders with live indicator | Medium | "Live" or "updated" text visible |
+
+### Full Pipeline
+
+| ID | Test Case | Priority | Expected Result |
+|----|-----------|----------|-----------------|
+| TC-P11-019 | Complete detection pipeline end-to-end | Critical | Event triggers rule, creates alert, SOAR escalates to incident |
+
+---
+
+## 23. Automated E2E Testing Strategy
 
 ### Can You Automate All of This?
 
@@ -1563,7 +1629,7 @@ jobs:
 
 ---
 
-## 23. Test Execution Tracker
+## 24. Test Execution Tracker
 
 ### Summary
 
@@ -1674,10 +1740,12 @@ jobs:
 9. Verify role-appropriate access
 10. View audit log (records all above actions)
 11. Verify hash chain integrity
+12. POST event to /api/siem/events (detection pipeline fires)
+13. Verify alert created and SOAR escalation
 
 ---
 
-*Document generated: 2026-03-03*
-*Platform version: BYOC v1.0*
-*Total test cases: 123*
-*Modules covered: 20*
+*Document generated: 2026-03-10*
+*Platform version: BYOC v2.0*
+*Total test cases: 142*
+*Modules covered: 21*
