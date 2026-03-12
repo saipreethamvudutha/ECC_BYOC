@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validTypes = ["vulnerability", "port", "compliance", "full", "discovery"];
+  const validTypes = ["vulnerability", "port", "compliance", "full", "discovery", "enterprise"];
   if (!validTypes.includes(type)) {
     return NextResponse.json(
       { error: `Invalid scan type. Must be one of: ${validTypes.join(", ")}` },
@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-  // Initialize scan progress based on type
-  const progress = initializeProgress(type);
+  // Initialize scan progress based on type (async — detects nmap availability)
+  const progress = await initializeProgress(type);
 
   const scan = await prisma.scan.create({
     data: {

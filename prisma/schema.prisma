@@ -444,6 +444,9 @@ model Scan {
   completedAt DateTime?
   createdById String?
   scheduleCron String?  // cron expression for scheduled scans
+  scanEngine  String   @default("builtin") // "builtin" | "nmap"
+  nmapVersion String?  // e.g. "7.94" when nmap engine used
+  rawOutput   String?  // Nmap XML output for audit evidence
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

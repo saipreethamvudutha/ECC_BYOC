@@ -30,6 +30,7 @@ export interface ScanProgress {
   totalBatches: number;
   totalFindings: number;
   checkResults: Record<string, number>; // checkId → finding count
+  scanEngine?: string; // "builtin" | "nmap"
 }
 
 export interface BatchResult {

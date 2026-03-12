@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BYOC Scanner Engine v2 — Architecture Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #0a0e1a; color: #e0e6f0; min-height: 100vh; }
+
+  .page { max-width: 1500px; margin: 0 auto; padding: 40px 30px; }
+
+  /* Title */
+  .title-block { text-align: center; margin-bottom: 40px; }
+  .title-block h1 { font-size: 34px; font-weight: 800; background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+  .title-block p { color: #8892b0; font-size: 14px; margin-top: 8px; }
+
+  /* Stats bar */
+  .stats-bar { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin-bottom: 40px; }
+  .stat { text-align: center; padding: 12px 20px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px; min-width: 130px; }
+  .stat-num { font-size: 24px; font-weight: 800; color: #60a5fa; }
+  .stat-label { font-size: 11px; color: #8892b0; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Flow container */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+  /* Arrow connectors */
+  .arrow { width: 3px; height: 35px; position: relative; }
+  .arrow-blue { background: linear-gradient(to bottom, #3b82f6, #60a5fa); }
+  .arrow-blue::after { content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #60a5fa; }
+  .arrow-amber { background: linear-gradient(to bottom, #f59e0b, #fbbf24); }
+  .arrow-amber::after { content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #fbbf24; }
+  .arrow-green { background: linear-gradient(to bottom, #10b981, #34d399); }
+  .arrow-green::after { content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #34d399; }
+  .arrow-purple { background: linear-gradient(to bottom, #8b5cf6, #a78bfa); }
+  .arrow-purple::after { content: ''; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #a78bfa; }
+
+  /* Section boxes */
+  .section {
+    width: 100%;
+    max-width: 1200px;
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+  }
+
+  /* API Layer */
+  .api-layer {
+    background: linear-gradient(135deg, #1e3a5f, #1a2744);
+    border: 1px solid #2d4a6f;
+  }
+  .section-badge {
+    position: absolute;
+    top: -12px;
+    left: 24px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .badge-blue { background: #1d4ed8; color: #bfdbfe; }
+  .badge-amber { background: #92400e; color: #fde68a; }
+  .badge-green { background: #065f46; color: #a7f3d0; }
+  .badge-purple { background: #5b21b6; color: #ddd6fe; }
+  .badge-red { background: #991b1b; color: #fecaca; }
+  .badge-cyan { background: #164e63; color: #a5f3fc; }
+
+  .section h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #f1f5f9; }
+  .section-desc { font-size: 12px; color: #8892b0; margin-bottom: 14px; }
+
+  .api-endpoints { display: flex; gap: 16px; flex-wrap: wrap; }
+  .endpoint {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 8px;
+    padding: 10px 16px;
+    flex: 1;
+    min-width: 240px;
+  }
+  .endpoint code { font-size: 12px; color: #60a5fa; font-family: 'JetBrains Mono', monospace; }
+  .endpoint .ep-desc { font-size: 11px; color: #6b7fa3; margin-top: 4px; }
+
+  /* Orchestrator */
+  .orchestrator {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border: 2px solid #f59e0b;
+    box-shadow: 0 0 30px rgba(245,158,11,0.1);
+  }
+  .orch-flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .orch-step {
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: center;
+    min-width: 160px;
+  }
+  .orch-step .step-title { font-size: 12px; font-weight: 600; color: #fbbf24; }
+  .orch-step .step-detail { font-size: 10px; color: #8892b0; margin-top: 3px; }
+  .orch-arrow { font-size: 20px; color: #f59e0b; }
+
+  /* Adapter split */
+  .adapter-split { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; width: 100%; max-width: 1200px; align-items: start; }
+  .adapter-box {
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+  }
+  .nmap-adapter {
+    background: linear-gradient(135deg, #0f2a1f, #0a1f15);
+    border: 2px solid #10b981;
+    box-shadow: 0 0 25px rgba(16,185,129,0.1);
+  }
+  .builtin-adapter {
+    background: linear-gradient(135deg, #1a1a2e, #151530);
+    border: 1px solid #6366f1;
+    opacity: 0.85;
+  }
+  .adapter-or {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 60px;
+  }
+  .or-badge {
+    background: #1e293b;
+    border: 2px solid #475569;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    color: #94a3b8;
+  }
+  .adapter-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .adapter-subtitle { font-size: 11px; color: #6b7fa3; margin-bottom: 14px; }
+  .adapter-config { font-size: 11px; color: #94a3b8; margin-bottom: 12px; }
+  .adapter-config span { color: #fbbf24; font-weight: 600; }
+
+  /* Module grid */
+  .modules-grid { display: flex; flex-direction: column; gap: 10px; }
+  .module-group { margin-bottom: 6px; }
+  .module-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; font-weight: 600; }
+  .label-green { color: #34d399; }
+  .label-amber { color: #fbbf24; }
+  .label-blue { color: #60a5fa; }
+  .label-indigo { color: #818cf8; }
+
+  .module-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .pill {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .pill-green { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+  .pill-amber { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
+  .pill-blue { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.2); color: #93c5fd; }
+  .pill-indigo { background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.2); color: #a5b4fc; }
+  .pill-new { position: relative; }
+  .pill-new::after { content: 'NEW'; position: absolute; top: -6px; right: -6px; font-size: 7px; background: #ef4444; color: white; padding: 1px 4px; border-radius: 4px; font-weight: 700; }
+
+  /* Nmap engine */
+  .nmap-engine {
+    background: linear-gradient(135deg, #0f1a2e, #0a1525);
+    border: 1px solid #1e40af;
+  }
+  .engine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .engine-mod {
+    background: rgba(30,64,175,0.15);
+    border: 1px solid rgba(30,64,175,0.3);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+  .engine-mod .mod-icon { font-size: 22px; margin-bottom: 4px; }
+  .engine-mod .mod-name { font-size: 11px; font-weight: 600; color: #93c5fd; }
+  .engine-mod .mod-file { font-size: 9px; color: #6b7fa3; font-family: monospace; }
+
+  /* Post-scan pipeline */
+  .pipeline {
+    background: linear-gradient(135deg, #1a0f2e, #150a25);
+    border: 1px solid #7c3aed;
+  }
+  .pipeline-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .pipeline-step {
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 8px;
+    padding: 8px 14px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .pipeline-step .ps-icon { font-size: 18px; }
+  .pipeline-step .ps-name { font-size: 11px; font-weight: 600; color: #c4b5fd; }
+  .pipeline-step .ps-detail { font-size: 9px; color: #7c6fa3; margin-top: 2px; }
+  .pipeline-arrow { color: #7c3aed; font-size: 16px; }
+
+  /* Deployment comparison */
+  .deploy-section { width: 100%; max-width: 1200px; margin-top: 10px; }
+  .deploy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .deploy-box {
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+  }
+  .deploy-vercel {
+    background: linear-gradient(135deg, #1a1a2e, #151530);
+    border: 1px solid #475569;
+    opacity: 0.7;
+  }
+  .deploy-aws {
+    background: linear-gradient(135deg, #0f2a1f, #0a1f15);
+    border: 2px solid #10b981;
+    box-shadow: 0 0 20px rgba(16,185,129,0.08);
+  }
+  .deploy-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .deploy-desc { font-size: 11px; color: #8892b0; margin-bottom: 10px; }
+  .deploy-specs { list-style: none; }
+  .deploy-specs li { font-size: 11px; color: #94a3b8; padding: 3px 0; padding-left: 16px; position: relative; }
+  .deploy-specs li::before { content: ''; position: absolute; left: 0; top: 9px; width: 6px; height: 6px; border-radius: 50%; }
+  .deploy-vercel .deploy-specs li::before { background: #6366f1; }
+  .deploy-aws .deploy-specs li::before { background: #10b981; }
+  .deploy-recommended {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #10b981;
+    color: #022c22;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  /* Auto-detect callout */
+  .auto-detect {
+    width: 100%; max-width: 1200px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.05), rgba(16,185,129,0.05));
+    border: 1px dashed rgba(245,158,11,0.3);
+    border-radius: 12px;
+    padding: 16px 24px;
+    text-align: center;
+    margin-top: 10px;
+  }
+  .auto-detect code { color: #fbbf24; font-size: 12px; }
+  .auto-detect p { font-size: 12px; color: #8892b0; margin-top: 4px; }
+
+  /* Scan types table */
+  .scan-types { width: 100%; max-width: 1200px; }
+  .scan-types-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .scan-type-card {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(59,130,246,0.15);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .st-name { font-size: 13px; font-weight: 700; color: #60a5fa; }
+  .st-count { font-size: 10px; color: #6b7fa3; }
+  .st-modules { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+
+  /* Legend */
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 30px; padding: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8892b0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+  .dot-green { background: #10b981; }
+  .dot-amber { background: #f59e0b; }
+  .dot-blue { background: #3b82f6; }
+  .dot-purple { background: #7c3aed; }
+  .dot-indigo { background: #6366f1; }
+  .dot-red { background: #ef4444; }
+
+  /* Footer */
+  .footer { text-align: center; margin-top: 30px; color: #475569; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Title -->
+  <div class="title-block">
+    <h1>BYOC Scanner Engine v2 — Architecture</h1>
+    <p>Enterprise-Grade Nmap Integration with Auto-Fallback to Node.js</p>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num">15</div><div class="stat-label">Check Modules</div></div>
+    <div class="stat"><div class="stat-num">10</div><div class="stat-label">Scan Profiles</div></div>
+    <div class="stat"><div class="stat-num">70+</div><div class="stat-label">Vuln DB Entries</div></div>
+    <div class="stat"><div class="stat-num">9</div><div class="stat-label">NSE Parsers</div></div>
+    <div class="stat"><div class="stat-num">6</div><div class="stat-label">Scan Types</div></div>
+    <div class="stat"><div class="stat-num">5</div><div class="stat-label">CIS Controls</div></div>
+  </div>
+
+  <div class="flow">
+
+    <!-- Layer 1: API -->
+    <div class="section api-layer">
+      <div class="section-badge badge-blue">Layer 1 — API</div>
+      <h3>Next.js API Routes</h3>
+      <div class="api-endpoints">
+        <div class="endpoint">
+          <code>POST /api/scans/create</code>
+          <div class="ep-desc">Creates scan record, calls <code>initializeProgress()</code> which auto-detects engine (Nmap or builtin). Stores scan config + engine type in DB.</div>
+        </div>
+        <div class="endpoint">
+          <code>POST /api/scans/[id]/execute</code>
+          <div class="ep-desc">UI polls this endpoint. Each call runs one batch of checks via <code>executeNextBatch()</code>. Returns progress JSON until status = "completed".</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow arrow-blue"></div>
+
+    <!-- Layer 2: Orchestrator -->
+    <div class="section orchestrator">
+      <div class="section-badge badge-amber">Layer 2 — Orchestrator</div>
+      <h3>Scanner Engine Core <span style="font-size:11px;color:#8892b0;font-weight:400">— src/lib/scanner/index.ts</span></h3>
+      <div class="orch-flow">
+        <div class="orch-step">
+          <div class="step-title">getActiveAdapter()</div>
+          <div class="step-detail">Auto-detect Nmap at runtime</div>
+        </div>
+        <div class="orch-arrow">&#8594;</div>
+        <div class="orch-step">
+          <div class="step-title">Select Engine</div>
+          <div class="step-detail">Nmap or Node.js fallback</div>
+        </div>
+        <div class="orch-arrow">&#8594;</div>
+        <div class="orch-step">
+          <div class="step-title">Get Check Modules</div>
+          <div class="step-detail">Based on scan type</div>
+        </div>
+        <div class="orch-arrow">&#8594;</div>
+        <div class="orch-step">
+          <div class="step-title">Run Batch</div>
+          <div class="step-detail">Chunked execution</div>
+        </div>
+        <div class="orch-arrow">&#8594;</div>
+        <div class="orch-step">
+          <div class="step-title">Save to DB</div>
+          <div class="step-detail">Progress + findings</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow arrow-amber"></div>
+
+    <!-- Layer 3: Adapter Split -->
+    <div class="adapter-split">
+
+      <!-- Nmap Adapter -->
+      <div class="adapter-box nmap-adapter">
+        <div class="section-badge badge-green">Nmap Adapter</div>
+        <div class="adapter-title" style="color:#34d399;">Nmap Scanner Engine</div>
+        <div class="adapter-subtitle">Full Nmap integration — enterprise grade</div>
+        <div class="adapter-config">Batch: <span>1 check</span> | Timeout: <span>300s</span> | Profiles: <span>10</span></div>
+
+        <div class="modules-grid">
+          <div class="module-group">
+            <div class="module-group-label label-green">Nmap-Powered (4 modules)</div>
+            <div class="module-pills">
+              <div class="pill pill-green">Port Scan (-sS SYN)</div>
+              <div class="pill pill-green">Service Detection (-sV + CPE)</div>
+              <div class="pill pill-green">OS Fingerprint (-O 90%+)</div>
+              <div class="pill pill-green">Network Discovery (-sn)</div>
+            </div>
+          </div>
+          <div class="module-group">
+            <div class="module-group-label label-amber">Enterprise (3 modules)</div>
+            <div class="module-pills">
+              <div class="pill pill-amber pill-new">Vuln Scripts (NSE)</div>
+              <div class="pill pill-amber pill-new">Auth Scan (SSH/FTP/SMB)</div>
+              <div class="pill pill-amber pill-new">CIS v8.1 Benchmark</div>
+            </div>
+          </div>
+          <div class="module-group">
+            <div class="module-group-label label-blue">HTTP-Based (8 modules)</div>
+            <div class="module-pills">
+              <div class="pill pill-blue">HTTP Headers</div>
+              <div class="pill pill-blue">SSL/TLS</div>
+              <div class="pill pill-blue">Exposed Panels</div>
+              <div class="pill pill-blue">Info Disclosure</div>
+              <div class="pill pill-blue">Common CVEs</div>
+              <div class="pill pill-blue">DNS Checks</div>
+              <div class="pill pill-blue">Cloud Misconfig</div>
+              <div class="pill pill-blue">Cloud Inventory</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OR divider -->
+      <div class="adapter-or">
+        <div class="or-badge">OR</div>
+      </div>
+
+      <!-- Builtin Adapter -->
+      <div class="adapter-box builtin-adapter">
+        <div class="section-badge badge-indigo" style="background:#3730a3;color:#c7d2fe;">Fallback</div>
+        <div class="adapter-title" style="color:#818cf8;">Builtin Adapter (Node.js)</div>
+        <div class="adapter-subtitle">Pure TypeScript — no external binaries</div>
+        <div class="adapter-config">Batch: <span>2 checks</span> | Timeout: <span>7s</span> | Vercel-safe</div>
+
+        <div class="modules-grid">
+          <div class="module-group">
+            <div class="module-group-label label-indigo">Node.js Probes (4 modules)</div>
+            <div class="module-pills">
+              <div class="pill pill-indigo">TCP Port Scan</div>
+              <div class="pill pill-indigo">Regex Service Detection</div>
+              <div class="pill pill-indigo">Heuristic OS Fingerprint</div>
+              <div class="pill pill-indigo">TCP Network Discovery</div>
+            </div>
+          </div>
+          <div class="module-group">
+            <div class="module-group-label label-blue">HTTP-Based (8 modules)</div>
+            <div class="module-pills">
+              <div class="pill pill-blue">HTTP Headers</div>
+              <div class="pill pill-blue">SSL/TLS</div>
+              <div class="pill pill-blue">Exposed Panels</div>
+              <div class="pill pill-blue">Info Disclosure</div>
+              <div class="pill pill-blue">Common CVEs</div>
+              <div class="pill pill-blue">DNS Checks</div>
+              <div class="pill pill-blue">Cloud Misconfig</div>
+              <div class="pill pill-blue">Cloud Inventory</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="arrow arrow-green"></div>
+
+    <!-- Layer 4: Nmap Engine Core -->
+    <div class="section nmap-engine">
+      <div class="section-badge badge-blue">Layer 4 — Nmap Engine Core</div>
+      <h3>Nmap Wrapper <span style="font-size:11px;color:#8892b0;font-weight:400">— src/lib/scanner/nmap/</span></h3>
+      <p class="section-desc">Spawns <code>nmap</code> binary via <code>child_process.execFile()</code> — no shell, no injection. Parses XML output. Enriches with NVD CVE data.</p>
+      <div class="engine-grid">
+        <div class="engine-mod">
+          <div class="mod-icon">&#9881;</div>
+          <div class="mod-name">Executor</div>
+          <div class="mod-file">executor.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">Binary detection, process spawn, temp XML files</div>
+        </div>
+        <div class="engine-mod">
+          <div class="mod-icon">&#128196;</div>
+          <div class="mod-name">XML Parser</div>
+          <div class="mod-file">parser.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">fast-xml-parser: hosts, ports, services, OS, scripts</div>
+        </div>
+        <div class="engine-mod">
+          <div class="mod-icon">&#128203;</div>
+          <div class="mod-name">Scan Profiles</div>
+          <div class="mod-file">profiles.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">10 pre-defined profiles: quick-syn, full-tcp, etc.</div>
+        </div>
+        <div class="engine-mod">
+          <div class="mod-icon">&#128270;</div>
+          <div class="mod-name">NSE Parsers</div>
+          <div class="mod-file">nse-parsers.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">9 parsers: vulners, ssl, ssh, smb, ftp, snmp</div>
+        </div>
+        <div class="engine-mod">
+          <div class="mod-icon">&#128737;</div>
+          <div class="mod-name">NVD Client</div>
+          <div class="mod-file">nvd-client.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">NVD API 2.0 CVE lookup, rate-limited, 1hr cache</div>
+        </div>
+        <div class="engine-mod">
+          <div class="mod-icon">&#128279;</div>
+          <div class="mod-name">CPE Mapper</div>
+          <div class="mod-file">cpe-mapper.ts</div>
+          <div style="font-size:9px;color:#6b7fa3;margin-top:3px">CPE extraction from -sV &#8594; NVD CVE enrichment</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow arrow-purple"></div>
+
+    <!-- Layer 5: Post-Scan Pipeline -->
+    <div class="section pipeline">
+      <div class="section-badge badge-purple">Layer 5 — Post-Scan Pipeline</div>
+      <h3>Downstream Integration <span style="font-size:11px;color:#8892b0;font-weight:400">— triggered on scan completion</span></h3>
+      <div class="pipeline-flow">
+        <div class="pipeline-step">
+          <div class="ps-icon">&#128232;</div>
+          <div class="ps-name">SIEM Events</div>
+          <div class="ps-detail">Critical/high findings</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="ps-icon">&#128269;</div>
+          <div class="ps-name">Rule Engine</div>
+          <div class="ps-detail">11 evaluator types</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="ps-icon">&#9889;</div>
+          <div class="ps-name">SOAR Playbooks</div>
+          <div class="ps-detail">Auto-escalation</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="ps-icon">&#128203;</div>
+          <div class="ps-name">Compliance</div>
+          <div class="ps-detail">5 frameworks mapped</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="ps-icon">&#128187;</div>
+          <div class="ps-name">Asset Updates</div>
+          <div class="ps-detail">OS, services, ports</div>
+        </div>
+        <div class="pipeline-arrow">&#8594;</div>
+        <div class="pipeline-step">
+          <div class="ps-icon">&#129302;</div>
+          <div class="ps-name">AI Actions</div>
+          <div class="ps-detail">Remediation suggestions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow arrow-blue"></div>
+
+    <!-- Scan Types -->
+    <div class="section scan-types" style="background:linear-gradient(135deg,#111827,#0f172a);border:1px solid #1e293b;border-radius:16px;padding:24px;">
+      <div class="section-badge badge-cyan">Scan Types</div>
+      <h3 style="margin-bottom:14px;">6 Scan Type Configurations</h3>
+      <div class="scan-types-grid">
+        <div class="scan-type-card">
+          <div class="st-name">vulnerability</div>
+          <div class="st-count">8 modules</div>
+          <div class="st-modules">HTTP headers, SSL, ports, panels, CVEs, cloud, vuln scripts</div>
+        </div>
+        <div class="scan-type-card">
+          <div class="st-name">port</div>
+          <div class="st-count">3 modules</div>
+          <div class="st-modules">SYN port scan, HTTP headers, service detection</div>
+        </div>
+        <div class="scan-type-card">
+          <div class="st-name">compliance</div>
+          <div class="st-count">6 modules</div>
+          <div class="st-modules">HTTP, SSL, DNS, info disclosure, CIS benchmark, auth scan</div>
+        </div>
+        <div class="scan-type-card">
+          <div class="st-name">full</div>
+          <div class="st-count">12 modules</div>
+          <div class="st-modules">All HTTP + Nmap modules + cloud inventory + vuln scripts</div>
+        </div>
+        <div class="scan-type-card">
+          <div class="st-name">discovery</div>
+          <div class="st-count">7 modules</div>
+          <div class="st-modules">Network discovery, ports, services, OS, cloud, DNS</div>
+        </div>
+        <div class="scan-type-card" style="border-color:rgba(16,185,129,0.3);">
+          <div class="st-name" style="color:#34d399;">enterprise</div>
+          <div class="st-count">14 modules (all)</div>
+          <div class="st-modules">Full scan + auth audit + CIS benchmark + vuln scripts</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow arrow-green"></div>
+
+    <!-- Deployment -->
+    <div class="deploy-section">
+      <div class="deploy-grid">
+        <div class="deploy-box deploy-vercel">
+          <div class="deploy-title" style="color:#818cf8;">Vercel (Serverless)</div>
+          <div class="deploy-desc">Automatic fallback — no Nmap available in serverless</div>
+          <ul class="deploy-specs">
+            <li>Builtin Node.js adapter only</li>
+            <li>12 check modules (HTTP + TCP probes)</li>
+            <li>2 checks per batch, 7s timeout</li>
+            <li>50 regex patterns for service detection</li>
+            <li>65% OS fingerprint accuracy</li>
+            <li>Static vulnerability database (70 entries)</li>
+          </ul>
+        </div>
+        <div class="deploy-box deploy-aws">
+          <div class="deploy-recommended">RECOMMENDED</div>
+          <div class="deploy-title" style="color:#34d399;">AWS EC2 / Docker</div>
+          <div class="deploy-desc">Full Nmap engine — enterprise scanning capabilities</div>
+          <ul class="deploy-specs">
+            <li>Nmap adapter with 15 check modules</li>
+            <li>SYN scan of 65,535 ports</li>
+            <li>12,000+ Nmap service signatures</li>
+            <li>90%+ OS fingerprint accuracy</li>
+            <li>Live NVD CVE lookup via CPE</li>
+            <li>NSE vulnerability scripts (vulners, SMB, SSL)</li>
+            <li>CIS v8.1 compliance benchmark</li>
+            <li>Auth audit (SSH, FTP, SMB, SNMP)</li>
+            <li>Raw Nmap XML stored for audit evidence</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-detect callout -->
+    <div class="auto-detect">
+      <code>isNmapAvailable() &#8594; true ? nmapAdapter : builtinAdapter</code>
+      <p>Zero configuration. Install Nmap on the server and the scanner engine upgrades automatically at runtime. No rebuild, no env vars, no config files.</p>
+    </div>
+
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot dot-green"></div> Nmap-powered modules</div>
+    <div class="legend-item"><div class="legend-dot dot-amber"></div> Enterprise modules (NEW)</div>
+    <div class="legend-item"><div class="legend-dot dot-blue"></div> HTTP-based modules</div>
+    <div class="legend-item"><div class="legend-dot dot-indigo"></div> Node.js fallback modules</div>
+    <div class="legend-item"><div class="legend-dot dot-purple"></div> Post-scan pipeline</div>
+    <div class="legend-item"><div class="legend-dot dot-red"></div> New in Phase 12A</div>
+  </div>
+
+  <div class="footer">
+    BYOC Cybersecurity Platform &mdash; Scanner Engine v2 (Phase 12A) &mdash; Generated March 2026
+  </div>
+
+</div>
+</body>
+</html>

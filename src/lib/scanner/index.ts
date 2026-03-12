@@ -10,10 +10,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { CheckResult, ScanProgress, BatchResult } from "./types";
-import { builtinAdapter } from "./adapters/builtin";
+import { builtinAdapter, getActiveAdapter } from "./adapters/builtin";
 
-const BATCH_SIZE = 2; // checks per batch (conservative for Vercel)
-const BATCH_TIMEOUT_MS = 7000; // max time per batch (leave 3s margin for Vercel)
+// Builtin (Vercel): 2 checks/batch, 7s timeout
+// Nmap (AWS/self-hosted): 1 check/batch, 300s timeout (Nmap scans are heavier)
+const BUILTIN_BATCH_SIZE = 2;
+const BUILTIN_TIMEOUT_MS = 7000;
+const NMAP_BATCH_SIZE = 1;
+const NMAP_TIMEOUT_MS = 300000;
 
 function parseProgress(progressStr: string): ScanProgress {
   try {
@@ -36,15 +40,18 @@ function parseProgress(progressStr: string): ScanProgress {
   }
 }
 
-export function initializeProgress(scanType: string): ScanProgress {
-  const checks = builtinAdapter.getCheckModules(scanType);
-  const totalBatches = Math.ceil(checks.length / BATCH_SIZE);
+export async function initializeProgress(scanType: string): Promise<ScanProgress> {
+  const adapter = await getActiveAdapter();
+  const checks = adapter.getCheckModules(scanType);
+  const batchSize = adapter.name === 'nmap' ? NMAP_BATCH_SIZE : BUILTIN_BATCH_SIZE;
+  const totalBatches = Math.ceil(checks.length / batchSize);
   return {
     completedChecks: [],
     currentBatch: 0,
     totalBatches,
     totalFindings: 0,
     checkResults: {},
+    scanEngine: adapter.name,
   };
 }
 
@@ -59,11 +66,15 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
 
   const progress = parseProgress(scan.progress);
   const targets: string[] = JSON.parse(scan.targets);
-  const allChecks = builtinAdapter.getCheckModules(scan.type);
+  const adapter = await getActiveAdapter();
+  const isNmap = adapter.name === 'nmap';
+  const effectiveBatchSize = isNmap ? NMAP_BATCH_SIZE : BUILTIN_BATCH_SIZE;
+  const effectiveTimeout = isNmap ? NMAP_TIMEOUT_MS : BUILTIN_TIMEOUT_MS;
+  const allChecks = adapter.getCheckModules(scan.type);
 
   // Update total batches based on targets × checks
   const totalCheckRuns = allChecks.length; // checks per target
-  progress.totalBatches = Math.ceil(totalCheckRuns / BATCH_SIZE);
+  progress.totalBatches = Math.ceil(totalCheckRuns / effectiveBatchSize);
 
   // 2. Mark as running if not already
   if (scan.status !== "running") {
@@ -95,7 +106,7 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
     return { status: "completed", progress, newFindings: 0 };
   }
 
-  const batchChecks = remainingChecks.slice(0, BATCH_SIZE);
+  const batchChecks = remainingChecks.slice(0, effectiveBatchSize);
 
   // 4. Run checks against all targets with timeout
   let newFindings = 0;
@@ -103,12 +114,12 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
 
   for (const check of batchChecks) {
     // Check if we're approaching the timeout
-    if (Date.now() - batchStartTime > BATCH_TIMEOUT_MS) break;
+    if (Date.now() - batchStartTime > effectiveTimeout) break;
 
     const allResults: (CheckResult & { target: string })[] = [];
 
     for (const target of targets) {
-      if (Date.now() - batchStartTime > BATCH_TIMEOUT_MS) break;
+      if (Date.now() - batchStartTime > effectiveTimeout) break;
 
       try {
         const results = await check.run(target);

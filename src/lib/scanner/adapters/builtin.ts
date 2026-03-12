@@ -9,6 +9,8 @@
  * - "discovery" scan type for client's Asset Discovery workflow
  * - Enhanced port scan (100+ ports with UDP)
  * - Cloud inventory with AWS/Azure/GCP detection
+ *
+ * Phase 12A: getActiveAdapter() dynamically selects nmap or builtin adapter
  */
 
 import { ScannerAdapter, CheckModule } from "../types";
@@ -25,6 +27,9 @@ import { networkDiscoveryCheck } from "../checks/network-discovery";
 import { serviceDetectionCheck } from "../checks/service-detection";
 import { osFingerprintCheck } from "../checks/os-fingerprint";
 import { cloudInventoryCheck } from "../checks/cloud-inventory";
+// Phase 12A: Nmap adapter
+import { isNmapAvailable } from "../nmap";
+import { nmapAdapter } from "./nmap";
 
 // All available check modules (12 total: 8 original + 4 new)
 const ALL_CHECKS: CheckModule[] = [
@@ -97,3 +102,25 @@ export const builtinAdapter: ScannerAdapter = {
     return ALL_CHECKS.filter((c) => checkIds.includes(c.id));
   },
 };
+
+/**
+ * Dynamic adapter selection — returns nmap adapter if Nmap is installed,
+ * otherwise falls back to the builtin Node.js adapter.
+ */
+let cachedAdapter: ScannerAdapter | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 60000; // 1 minute
+
+export async function getActiveAdapter(): Promise<ScannerAdapter> {
+  const now = Date.now();
+  if (cachedAdapter && now - cacheTime < CACHE_TTL) {
+    return cachedAdapter;
+  }
+
+  const nmapOk = await isNmapAvailable();
+  cachedAdapter = nmapOk ? nmapAdapter : builtinAdapter;
+  cacheTime = now;
+
+  console.log(`[Scanner] Active adapter: ${cachedAdapter.name}`);
+  return cachedAdapter;
+}
