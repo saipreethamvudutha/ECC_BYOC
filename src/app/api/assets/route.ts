@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rbac } from "@/lib/rbac";
@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 
 const safeParse = (str: string) => { try { return JSON.parse(str); } catch { return {}; } };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,8 +24,23 @@ export async function GET() {
   // Load user's RBAC profile for scope filtering
   const profile = await rbac.loadProfile(session.id, session.tenantId);
 
+  // Status filter — hide "discovered" assets by default (only show managed)
+  const url = new URL(request.url);
+  const statusParam = url.searchParams.get("status");
+
   // Build WHERE clause with scope-based filtering
   const where: Prisma.AssetWhereInput = { tenantId: session.tenantId };
+
+  if (statusParam === "all") {
+    // Show everything including discovered
+  } else if (statusParam === "discovered") {
+    where.status = "discovered";
+  } else if (statusParam) {
+    where.status = statusParam;
+  } else {
+    // Default: exclude discovered assets from inventory view
+    where.status = { not: "discovered" };
+  }
 
   if (!profile.globalScope) {
     if (profile.tagFilters.length === 0) {

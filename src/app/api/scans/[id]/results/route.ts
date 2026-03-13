@@ -57,7 +57,13 @@ export async function GET(
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        asset: { select: { id: true, name: true, ipAddress: true } },
+        asset: {
+          select: {
+            id: true, name: true, ipAddress: true, hostname: true,
+            os: true, status: true, type: true, criticality: true,
+            openPorts: true, services: true,
+          },
+        },
       },
     }),
     prisma.scanResult.count({ where }),
@@ -81,7 +87,18 @@ export async function GET(
       remediation: r.remediation,
       details: safeParse(r.details),
       asset: r.asset
-        ? { id: r.asset.id, name: r.asset.name, ipAddress: r.asset.ipAddress }
+        ? {
+            id: r.asset.id,
+            name: r.asset.name,
+            ipAddress: r.asset.ipAddress,
+            hostname: r.asset.hostname,
+            os: r.asset.os,
+            status: r.asset.status,
+            type: r.asset.type,
+            criticality: r.asset.criticality,
+            openPorts: r.asset.openPorts ? safeParse(r.asset.openPorts) : null,
+            services: r.asset.services ? safeParse(r.asset.services) : null,
+          }
         : null,
       createdAt: r.createdAt.toISOString(),
     })),

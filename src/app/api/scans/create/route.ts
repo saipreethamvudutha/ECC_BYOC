@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!existing) {
+      // Create as "discovered" — user selects which to onboard after scan
       await prisma.asset.create({
         data: {
           tenantId: session.tenantId,
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
           ipAddress: isIp ? host : null,
           hostname: isIp ? null : host,
           criticality: "medium",
-          status: "active",
+          status: "discovered",
         },
       });
     }

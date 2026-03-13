@@ -83,10 +83,12 @@ const criticalityVariants: Record<string, "critical" | "high" | "medium" | "low"
   low: "low",
 };
 
-const statusVariants: Record<string, "success" | "secondary" | "destructive"> = {
+const statusVariants: Record<string, "success" | "secondary" | "destructive" | "warning"> = {
   active: "success",
   inactive: "secondary",
   decommissioned: "destructive",
+  discovered: "warning",
+  maintenance: "secondary",
 };
 
 const ASSET_TYPES = ["server", "workstation", "network_device", "cloud_resource", "application", "database", "iot_device", "mobile_device", "virtual_machine", "container", "firewall", "load_balancer"];
@@ -100,6 +102,7 @@ export default function AssetsPage() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedCriticality, setSelectedCriticality] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const [showAddAsset, setShowAddAsset] = useState(false);
@@ -127,8 +130,10 @@ export default function AssetsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [tagDropdownOpen]);
 
-  function loadAssets() {
-    fetch("/api/assets")
+  function loadAssets(statusFilter?: string | null) {
+    const status = statusFilter !== undefined ? statusFilter : selectedStatus;
+    const params = status ? `?status=${status}` : "";
+    fetch(`/api/assets${params}`)
       .then((res) => {
         if (!res.ok) return [];
         return res.json();
@@ -140,7 +145,8 @@ export default function AssetsPage() {
 
   useEffect(() => {
     loadAssets();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStatus]);
 
   async function handleCreateAsset() {
     if (!assetForm.name) return;
@@ -285,6 +291,19 @@ export default function AssetsPage() {
           {ASSET_TYPES.map((t) => (
             <option key={t} value={t}>{typeLabels[t] || t.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>
           ))}
+        </select>
+
+        {/* Status Filter */}
+        <select
+          value={selectedStatus || ""}
+          onChange={(e) => setSelectedStatus(e.target.value || null)}
+          className="px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-slate-300 focus:outline-none focus:border-cyan-500/50"
+        >
+          <option value="">Managed Assets</option>
+          <option value="discovered">Discovered (Pending)</option>
+          <option value="all">All Assets</option>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
         </select>
 
         {/* Criticality Filter */}
