@@ -66,6 +66,20 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
 
   const progress = parseProgress(scan.progress);
   const targets: string[] = JSON.parse(scan.targets);
+
+  // Load credentials for authenticated scans
+  const credentialMap = new Map<string, import('./vault').PlainCredential>();
+  if (scan.type === 'authenticated') {
+    const { decryptCredential } = await import('./vault');
+    const targetCreds = await prisma.scanTargetCredential.findMany({
+      where: { scanId: scan.id, tenantId: scan.tenantId },
+      include: { credential: true },
+    });
+    for (const tc of targetCreds) {
+      credentialMap.set(tc.target, decryptCredential(tc.credential));
+    }
+  }
+
   const adapter = await getActiveAdapter();
   const isNmap = adapter.name === 'nmap';
   const effectiveBatchSize = isNmap ? NMAP_BATCH_SIZE : BUILTIN_BATCH_SIZE;
@@ -122,7 +136,11 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
       if (Date.now() - batchStartTime > effectiveTimeout) break;
 
       try {
-        const results = await check.run(target);
+        const runConfig: Record<string, unknown> = {};
+        if (credentialMap.has(target)) {
+          runConfig.credential = credentialMap.get(target);
+        }
+        const results = await check.run(target, runConfig);
         for (const r of results) {
           allResults.push({ ...r, target });
         }

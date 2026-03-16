@@ -31,6 +31,8 @@ export const CAPABILITIES: CapabilityDef[] = [
   { id: "scan.policy.view", module: "scan", name: "View Scan Policies", description: "See scan policy configurations", riskLevel: "low" },
   { id: "scan.policy.manage", module: "scan", name: "Manage Scan Policies", description: "Create, edit, delete scan policies and profiles", riskLevel: "high" },
   { id: "scan.export", module: "scan", name: "Export Scan Results", description: "Download scan results as CSV/JSON/PDF", riskLevel: "low" },
+  { id: "scan.credential.view", module: "scan", name: "View Credentials", description: "List credential vault entries (names/types only, secrets never returned)", riskLevel: "medium" },
+  { id: "scan.credential.manage", module: "scan", name: "Manage Credentials", description: "Create, update, delete and test scanner credentials (SSH/WinRM)", riskLevel: "critical" },
 
   // ── Assets (7) ──
   { id: "asset.view", module: "asset", name: "View Assets", description: "See asset inventory within assigned scope", riskLevel: "low" },

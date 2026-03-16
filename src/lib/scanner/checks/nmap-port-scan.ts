@@ -66,8 +66,18 @@ export const nmapPortScanCheck: CheckModule = {
     const profile = config?.fullScan ? SCAN_PROFILES['full-tcp'] : SCAN_PROFILES['quick-syn'];
     const results: CheckResult[] = [];
 
+    // Custom port range support (validated against allowlist before passing to nmap)
+    const portRange = config?.portRange as string | undefined;
+    if (portRange && !/^[0-9,\-TU]+$/.test(portRange)) {
+      throw new Error('[NmapPortScan] Invalid port range format. Use digits, commas, hyphens, T (TCP), U (UDP) only.');
+    }
+
+    const nmapArgs = portRange
+      ? ['-sS', '-sV', '-T4', '-p', portRange, '--open']
+      : [...profile.args];
+
     try {
-      const { xml } = await runNmap([...profile.args, host], profile.timeout);
+      const { xml } = await runNmap([...nmapArgs, host], profile.timeout);
       const scanResult = parseNmapXml(xml);
 
       if (scanResult.hosts.length === 0) return results;

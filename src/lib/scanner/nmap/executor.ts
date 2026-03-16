@@ -172,3 +172,46 @@ export async function runNmap(
 export function resetNmapCache(): void {
   cachedNmapPath = undefined;
 }
+
+/**
+ * Parallel Nmap execution — scans multiple targets concurrently.
+ * Each target gets its own runNmap() call (already uses randomUUID for temp files = parallel safe).
+ * @param targets  Array of IP addresses or hostnames
+ * @param baseArgs Nmap args applied to every target (exclude the target itself)
+ * @param timeoutMs Per-target timeout
+ * @param concurrency Max simultaneous nmap processes (default 5)
+ */
+export async function runNmapParallel(
+  targets: string[],
+  baseArgs: string[],
+  timeoutMs: number = 300000,
+  concurrency: number = 5
+): Promise<NmapRunResult[]> {
+  if (targets.length === 0) return [];
+
+  const results: NmapRunResult[] = new Array(targets.length);
+  const queue = targets.map((t, i) => ({ target: t, index: i }));
+  const active = Math.min(concurrency, targets.length);
+
+  const worker = async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+      try {
+        results[item.index] = await runNmap([...baseArgs, item.target], timeoutMs);
+      } catch (err) {
+        // Return a minimal result on failure so the array stays indexed
+        results[item.index] = {
+          xml: '',
+          stdout: '',
+          stderr: err instanceof Error ? err.message : String(err),
+          exitCode: 1,
+          duration: 0,
+        };
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: active }, worker));
+  return results;
+}

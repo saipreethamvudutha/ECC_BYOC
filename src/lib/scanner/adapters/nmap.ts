@@ -9,6 +9,8 @@ import { CheckModule, ScannerAdapter } from '../types';
 
 // Nmap-powered replacements (same IDs as originals)
 import { nmapPortScanCheck } from '../checks/nmap-port-scan';
+import { sshOsInfoCheck, sshUserAccountsCheck, sshSudoConfigCheck, sshListeningServicesCheck, sshInstalledPackagesCheck, sshFilePermissionsCheck, sshCronJobsCheck, sshSshdConfigCheck } from '../connectors/ssh';
+import { winrmOsInfoCheck, winrmLocalUsersCheck, winrmLocalAdminsCheck, winrmServicesCheck, winrmInstalledSoftwareCheck, winrmFirewallRulesCheck, winrmPatchesCheck } from '../connectors/winrm';
 import { nmapServiceDetectionCheck } from '../checks/nmap-service-detection';
 import { nmapOSFingerprintCheck } from '../checks/nmap-os-fingerprint';
 import { nmapNetworkDiscoveryCheck } from '../checks/nmap-network-discovery';
@@ -95,6 +97,27 @@ const CHECKS_BY_TYPE: Record<string, CheckModule[]> = {
     nmapVulnScriptsCheck,
     nmapAuthScanCheck,
     cisBenchmarkCheck,
+  ],
+
+  authenticated: [
+    nmapPortScanCheck,
+    nmapServiceDetectionCheck,
+    nmapOSFingerprintCheck,
+    sshOsInfoCheck,
+    sshUserAccountsCheck,
+    sshSudoConfigCheck,
+    sshListeningServicesCheck,
+    sshInstalledPackagesCheck,
+    sshFilePermissionsCheck,
+    sshCronJobsCheck,
+    sshSshdConfigCheck,
+    winrmOsInfoCheck,
+    winrmLocalUsersCheck,
+    winrmLocalAdminsCheck,
+    winrmServicesCheck,
+    winrmInstalledSoftwareCheck,
+    winrmFirewallRulesCheck,
+    winrmPatchesCheck,
   ],
 };
 

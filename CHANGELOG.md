@@ -4,6 +4,78 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [1.3.0] — 2026-03-16 — Phase 12C: SSH/WinRM Authenticated Scanning + Diff Engine + Parallel Nmap
+
+### Added
+
+**Credential Vault (AES-256-GCM encrypted SSH/WinRM credentials)**
+- `CredentialVault` DB model — stores encrypted username, secret, passphrase
+- `ScanTargetCredential` DB model — maps credentials to scan targets
+- `ScanDiff` DB model — persists delta between two completed scans
+- `src/lib/scanner/vault/index.ts` — `encryptCredential()`, `decryptCredential()`, `toCredentialSummary()` (secrets never in API responses)
+
+**SSH Connector (8 check modules)**
+- `ssh-os-info` — uname + /etc/os-release via authenticated SSH
+- `ssh-user-accounts` — active users from /etc/passwd, flags UID 0 accounts
+- `ssh-sudo-config` — detects NOPASSWD sudo rules (high severity)
+- `ssh-listening-services` — ss/netstat including localhost-only services
+- `ssh-installed-packages` — dpkg/rpm software inventory (up to 200 packages)
+- `ssh-file-permissions` — checks /etc/shadow world-readable (critical)
+- `ssh-cron-jobs` — /etc/crontab + cron.d inventory
+- `ssh-sshd-config` — PermitRootLogin / PasswordAuthentication / PermitEmptyPasswords
+
+**WinRM Connector (7 check modules)**
+- `winrm-os-info` — Win32_OperatingSystem via PowerShell
+- `winrm-local-users` — Get-LocalUser inventory
+- `winrm-local-admins` — Administrators group membership
+- `winrm-services` — Running Windows services
+- `winrm-installed-software` — Registry-based software inventory
+- `winrm-firewall-rules` — Active inbound allow rules
+- `winrm-patches` — Get-HotFix with >30-day staleness detection (high severity)
+
+**Scan Diff Engine**
+- `src/lib/scanner/diff/engine.ts` — fingerprint-based finding comparison (new/resolved/persistent/changed)
+- `src/lib/scanner/diff/index.ts` — persist diff to DB, emit SIEM events for new critical/high findings
+- Risk trend classification: increasing / decreasing / stable
+- 1-hour result caching with idempotent recompute
+
+**Parallel Nmap Execution**
+- `runNmapParallel()` in `src/lib/scanner/nmap/executor.ts` — semaphore-limited concurrency (default 5)
+- Custom port range support in `nmap-port-scan.ts` with injection-prevention allowlist regex (`[0-9,\-TU]+`)
+
+**New Scan Type: `authenticated`**
+- Combined Nmap + SSH + WinRM checks per target
+- Credentials injected per-target at execution time
+- Nmap adapter: full 19-check authenticated profile
+- Builtin adapter: graceful fallback (HTTP/SSL/port checks only)
+
+**New API Routes (8 total)**
+- `GET/POST /api/credentials` — list and create credentials
+- `GET/PUT/DELETE /api/credentials/:id` — get, update, delete credential
+- `POST /api/credentials/:id/test` — live connectivity test (returns success:false not 500 on unreachable)
+- `GET/POST /api/scans/:id/diff` — retrieve and compute scan diff
+
+**RBAC Capabilities (+2)**
+- `scan.credential.view` (medium risk) — list credential names/types
+- `scan.credential.manage` (critical risk) — create/update/delete/test credentials
+
+**E2E Tests**
+- 25 new tests in `tests/e2e/18-phase12c.spec.ts`
+
+### Changed
+- `next.config.ts` — added `serverExternalPackages: ["ssh2"]` for native module compatibility
+- `prisma/schema.prisma` — 3 new models, relations on Tenant/User/Scan
+- `src/app/api/scans/create/route.ts` — `authenticated` added to valid types, `targetCredentials` array support
+- `src/lib/scanner/adapters/nmap.ts` — `authenticated` scan type with full check module list
+- `src/lib/scanner/adapters/builtin.ts` — `authenticated` fallback type
+- `src/lib/scanner/index.ts` — credential injection from vault for authenticated scans
+
+### Dependencies
+- `ssh2` — SSH2 client for Node.js (CJS, server-external)
+- `@types/ssh2` (dev) — TypeScript definitions
+
+---
+
 ## [1.2.0] — 2026-03-16 — Developer Infrastructure Pass 2: Complete AI Dev Stack + PII Redaction Skill + AWS Roadmap
 
 ### Added

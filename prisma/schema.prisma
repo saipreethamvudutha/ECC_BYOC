@@ -41,6 +41,9 @@ model Tenant {
   sessions     Session[]
   ssoProviders SSOProvider[]
   scimTokens   SCIMToken[]
+  credentialVaults      CredentialVault[]
+  scanTargetCredentials ScanTargetCredential[]
+  scanDiffs             ScanDiff[]
 
   @@map("tenants")
 }
@@ -81,6 +84,7 @@ model User {
   sessions            Session[]
   createdSSOProviders SSOProvider[]   @relation("SSOProviderCreator")
   createdSCIMTokens   SCIMToken[]    @relation("SCIMTokenCreator")
+  createdCredentials  CredentialVault[] @relation("CredentialCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -452,6 +456,9 @@ model Scan {
 
   tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   results ScanResult[]
+  targetCredentials ScanTargetCredential[]
+  diffsAsBase       ScanDiff[]             @relation("DiffBaseScan")
+  diffsAsNew        ScanDiff[]             @relation("DiffNewScan")
 
   @@index([tenantId])
   @@map("scans")
@@ -853,4 +860,75 @@ model SCIMToken {
 
   @@index([tenantId, isActive])
   @@map("scim_tokens")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER CREDENTIAL VAULT (Phase 12C)
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── CREDENTIAL VAULT (encrypted SSH/WinRM credentials) ─────────
+model CredentialVault {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  description    String?
+  credentialType String   // "ssh_password" | "ssh_key" | "winrm_password"
+  username       String   // AES-256-GCM encrypted
+  secret         String   // AES-256-GCM encrypted (password or SSH private key PEM)
+  passphrase     String?  // AES-256-GCM encrypted (SSH key passphrase, optional)
+  defaultPort    Int?     // null = protocol default (22 for SSH, 5985 for WinRM)
+  winrmScheme    String?  // "http" | "https"
+  sshKeyType     String?  // "rsa" | "ecdsa" | "ed25519"
+  lastUsedAt     DateTime?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy             User?                  @relation("CredentialCreator", fields: [createdById], references: [id])
+  scanTargetCredentials ScanTargetCredential[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("credential_vaults")
+}
+
+// ─── SCAN TARGET CREDENTIALS (maps targets to credentials) ──────
+model ScanTargetCredential {
+  id           String   @id @default(uuid())
+  tenantId     String
+  scanId       String
+  target       String
+  credentialId String
+  createdAt    DateTime @default(now())
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scan       Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  credential CredentialVault @relation(fields: [credentialId], references: [id], onDelete: Restrict)
+
+  @@unique([scanId, target])
+  @@index([tenantId, scanId])
+  @@map("scan_target_credentials")
+}
+
+// ─── SCAN DIFF (delta between two completed scans) ──────────────
+model ScanDiff {
+  id              String   @id @default(uuid())
+  tenantId        String
+  baseScanId      String
+  newScanId       String
+  computedAt      DateTime @default(now())
+  newCount        Int      @default(0)
+  resolvedCount   Int      @default(0)
+  persistentCount Int      @default(0)
+  changedCount    Int      @default(0)
+  diffData        String   @default("{}") // JSON: { new, resolved, persistent, changed }
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  baseScan Scan   @relation("DiffBaseScan", fields: [baseScanId], references: [id], onDelete: Cascade)
+  newScan  Scan   @relation("DiffNewScan", fields: [newScanId], references: [id], onDelete: Cascade)
+
+  @@unique([baseScanId, newScanId])
+  @@index([tenantId, newScanId])
+  @@map("scan_diffs")
 }

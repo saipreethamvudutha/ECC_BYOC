@@ -92,6 +92,14 @@ const CHECKS_BY_TYPE: Record<string, string[]> = {
     "dns-checks",
     "cloud-misconfig",
   ],
+  // Phase 12C: Authenticated scan (builtin fallback — no SSH/WinRM in builtin)
+  authenticated: [
+    "http-headers",
+    "ssl-tls",
+    "port-scan",
+    "service-detection",
+    "os-fingerprint",
+  ],
 };
 
 export const builtinAdapter: ScannerAdapter = {

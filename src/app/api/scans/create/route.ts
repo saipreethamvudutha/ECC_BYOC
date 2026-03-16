@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
-  const { name, type, targets } = await request.json();
+  const requestBody = await request.json();
+  const { name, type, targets } = requestBody;
 
   if (!name || !type || !targets?.length) {
     return NextResponse.json(
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validTypes = ["vulnerability", "port", "compliance", "full", "discovery", "enterprise"];
+  const validTypes = ["vulnerability", "port", "compliance", "full", "discovery", "enterprise", "authenticated"];
   if (!validTypes.includes(type)) {
     return NextResponse.json(
       { error: `Invalid scan type. Must be one of: ${validTypes.join(", ")}` },
@@ -50,6 +51,36 @@ export async function POST(request: NextRequest) {
       createdById: session.id,
     },
   });
+
+  // Create target credential mappings for authenticated scans
+  if (type === 'authenticated' && Array.isArray(requestBody.targetCredentials) && requestBody.targetCredentials.length > 0) {
+    const targetCredentials = requestBody.targetCredentials as Array<{ target: string; credentialId: string }>;
+
+    // Validate all credentialIds belong to this tenant
+    const credentialIds = [...new Set(targetCredentials.map((tc: { credentialId: string }) => tc.credentialId))];
+    const validCredentials = await prisma.credentialVault.findMany({
+      where: { id: { in: credentialIds }, tenantId: session.tenantId },
+      select: { id: true },
+    });
+    const validIds = new Set(validCredentials.map((c: { id: string }) => c.id));
+
+    const invalidCreds = credentialIds.filter((id: string) => !validIds.has(id));
+    if (invalidCreds.length > 0) {
+      // Delete the scan we just created and return error
+      await prisma.scan.delete({ where: { id: scan.id } });
+      return NextResponse.json({ error: `Invalid credentialId(s): ${invalidCreds.join(', ')}` }, { status: 400 });
+    }
+
+    await prisma.scanTargetCredential.createMany({
+      data: targetCredentials.map((tc: { target: string; credentialId: string }) => ({
+        tenantId: session.tenantId,
+        scanId: scan.id,
+        target: tc.target,
+        credentialId: tc.credentialId,
+      })),
+      skipDuplicates: true,
+    });
+  }
 
   // Auto-create Asset records for targets that don't exist
   for (const target of targets) {
