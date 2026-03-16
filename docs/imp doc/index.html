@@ -1,0 +1,1957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Furix AI — Architecture Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fff; color: #1a1a2e; overflow: hidden; height: 100vh; }
+
+  .topbar { height: 44px; background: #f8f9fb; border-bottom: 1px solid #e2e6ed; display: flex; align-items: center; padding: 0 20px; justify-content: space-between; }
+  .topbar h1 { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+  .topbar span { font-size: 11px; color: #6b7280; }
+  .legend { display: flex; gap: 14px; font-size: 10px; color: #6b7280; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 3px; vertical-align: middle; }
+
+  .canvas { position: relative; width: 100vw; height: calc(100vh - 44px); overflow: hidden; }
+
+  /* Nodes */
+  .node { position: absolute; border-radius: 8px; padding: 8px 12px; cursor: pointer; transition: box-shadow 0.2s, transform 0.15s; user-select: none; text-align: center; border: 1.5px solid; z-index: 2; }
+  .node:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); z-index: 10; }
+  .node.active { box-shadow: 0 0 0 3px rgba(59,130,246,0.4), 0 4px 14px rgba(0,0,0,0.12); z-index: 10; }
+  .node-title { font-size: 11px; font-weight: 600; margin-bottom: 1px; white-space: nowrap; }
+  .node-sub { font-size: 9px; opacity: 0.65; white-space: nowrap; }
+  .node-icon { font-size: 18px; margin-bottom: 3px; }
+
+  /* Core nodes - larger */
+  .node.node-core { padding: 12px 18px; }
+  .node.node-core .node-icon { font-size: 26px; margin-bottom: 4px; }
+  .node.node-core .node-title { font-size: 13px; }
+  .node.node-core .node-sub { font-size: 10px; }
+
+  .node-scan { background: #eff6ff; border-color: #93c5fd; }
+  .node-data { background: #f0fdf4; border-color: #86efac; }
+  .node-ai { background: #faf5ff; border-color: #c4b5fd; }
+  .node-ui { background: #f0f9ff; border-color: #7dd3fc; }
+  .node-external { background: #fef2f2; border-color: #fca5a5; }
+  .node-security { background: #fefce8; border-color: #fde047; }
+  .node-embed { background: #fdf4ff; border-color: #e879f9; }
+
+  /* Boundaries */
+  .boundary { position: absolute; border: 1.5px dashed; border-radius: 12px; pointer-events: none; z-index: 0; }
+  .boundary-label { position: absolute; top: -9px; left: 16px; font-size: 9px; font-weight: 600; padding: 0 6px; letter-spacing: 0.4px; text-transform: uppercase; }
+  .boundary-customer { border-color: #d1d5db; }
+  .boundary-customer .boundary-label { background: #fff; color: #9ca3af; }
+  .boundary-cloud { border-color: #fca5a5; }
+  .boundary-cloud .boundary-label { background: #fff; color: #ef4444; }
+
+  /* Intelligence core zone */
+  .core-zone { position: absolute; border: 2px solid #c4b5fd; border-radius: 16px; pointer-events: none; z-index: 0; background: rgba(250,245,255,0.25); }
+  .core-zone-label { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; padding: 1px 10px; background: #fff; color: #7c3aed; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; border-radius: 4px; border: 1px solid #c4b5fd; }
+
+  /* SVG arrows */
+  svg.arrows { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  svg.arrows path { pointer-events: stroke; cursor: pointer; stroke-linecap: round; }
+  svg.arrows path:hover { stroke-width: 3; }
+  svg.arrows path.active { stroke-width: 3; stroke-dasharray: 8 4; animation: dash 0.6s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -12; } }
+
+  /* Panel */
+  .panel-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.12); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .panel-overlay.open { opacity: 1; pointer-events: all; }
+  .panel { position: fixed; top: 0; right: -500px; width: 480px; height: 100%; background: #fff; z-index: 101; box-shadow: -4px 0 24px rgba(0,0,0,0.1); transition: right 0.25s ease; overflow-y: auto; }
+  .panel.open { right: 0; }
+  .panel-header { padding: 16px 20px 12px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: #fff; z-index: 1; }
+  .panel-header h2 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .panel-header .badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 99px; margin-right: 4px; }
+  .panel-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 6px; border: none; background: #f3f4f6; cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+  .panel-close:hover { background: #e5e7eb; }
+  .panel-body { padding: 16px 20px 32px; }
+  .panel-body h3 { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 6px; }
+  .panel-body h3:first-child { margin-top: 0; }
+  .panel-body p, .panel-body li { font-size: 12px; line-height: 1.55; color: #374151; }
+  .panel-body ul, .panel-body ol { padding-left: 16px; }
+  .panel-body li { margin-bottom: 3px; }
+  .panel-body table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; }
+  .panel-body th { text-align: left; padding: 4px 6px; background: #f9fafb; border: 1px solid #e5e7eb; font-weight: 600; color: #6b7280; }
+  .panel-body td { padding: 4px 6px; border: 1px solid #e5e7eb; }
+  .panel-body code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  .detail-tag { display: inline-block; font-size: 9px; padding: 2px 6px; border-radius: 4px; margin: 2px 3px 2px 0; background: #f3f4f6; color: #374151; }
+
+  .arrow-label { position: absolute; background: #1e293b; color: #fff; font-size: 10px; padding: 4px 8px; border-radius: 5px; pointer-events: none; z-index: 50; max-width: 200px; line-height: 1.3; opacity: 0; transition: opacity 0.15s; white-space: nowrap; }
+  .arrow-label.visible { opacity: 1; }
+
+  /* Drill-down overlay */
+  .drilldown { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #fff; z-index: 90; display: none; }
+  .drilldown.open { display: block; }
+  .drilldown-bar { height: 44px; background: #f8f9fb; border-bottom: 1px solid #e2e6ed; display: flex; align-items: center; padding: 0 20px; gap: 16px; }
+  .drilldown-bar h1 { font-size: 15px; font-weight: 600; color: #1a1a2e; flex: 1; text-align: center; }
+  .drilldown-bar span { font-size: 11px; color: #6b7280; }
+  .drilldown-back { background: none; border: 1px solid #d1d5db; border-radius: 6px; padding: 5px 14px; font-size: 12px; font-weight: 500; cursor: pointer; color: #374151; transition: all 0.15s; white-space: nowrap; }
+  .drilldown-back:hover { background: #f3f4f6; border-color: #9ca3af; }
+  .drilldown-canvas { position: relative; width: 100vw; height: calc(100vh - 44px); overflow: hidden; }
+
+  /* Drill-down zones */
+  .dd-zone { position: absolute; border: 1.5px dashed; border-radius: 10px; pointer-events: none; z-index: 0; }
+  .dd-zone-label { position: absolute; top: -9px; left: 16px; font-size: 9px; font-weight: 600; padding: 0 6px; background: #fff; letter-spacing: 0.4px; text-transform: uppercase; white-space: nowrap; }
+  .dd-zone-drivers { border-color: #93c5fd; background: rgba(239,246,255,0.25); }
+  .dd-zone-drivers .dd-zone-label { color: #3b82f6; }
+  .dd-zone-cloud { border-color: #fbbf24; background: rgba(255,251,235,0.25); }
+  .dd-zone-cloud .dd-zone-label { color: #d97706; }
+  .dd-zone-checks { border-color: #86efac; background: rgba(240,253,244,0.25); }
+  .dd-zone-checks .dd-zone-label { color: #16a34a; }
+
+  /* Drill-down node types */
+  .node-orch { background: #eff6ff; border-color: #60a5fa; }
+  .node-driver { background: #f0f9ff; border-color: #38bdf8; }
+  .node-cloudconn { background: #fffbeb; border-color: #fbbf24; }
+  .node-checkcat { background: #f0fdf4; border-color: #4ade80; }
+  .node-extref { background: #f9fafb; border-color: #d1d5db; }
+  .node-extref .node-title { color: #6b7280; }
+  .node-extref .node-sub { color: #9ca3af; }
+
+  /* Database drill-down node types */
+  .node-dbgraph { background: #faf5ff; border-color: #c4b5fd; }
+  .node-dbvector { background: #fdf4ff; border-color: #e879f9; }
+  .node-dbtimescale { background: #fff7ed; border-color: #fb923c; }
+  .node-dbrelational { background: #f0fdfa; border-color: #5eead4; }
+  .node-dbmgmt { background: #f1f5f9; border-color: #94a3b8; }
+  .node-dbpool { background: #eff6ff; border-color: #60a5fa; }
+
+  /* Database drill-down zones */
+  .dd-zone-storage { border-color: #a78bfa; background: rgba(250,245,255,0.2); }
+  .dd-zone-storage .dd-zone-label { color: #7c3aed; }
+  .dd-zone-mgmt { border-color: #94a3b8; background: rgba(241,245,249,0.2); }
+  .dd-zone-mgmt .dd-zone-label { color: #64748b; }
+
+  /* Expandable node hint */
+  .node-expandable { cursor: zoom-in; }
+  .node-expandable::after { content: '▸ Explore'; position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #93c5fd; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; opacity: 0; transition: opacity 0.15s; }
+  .node-expandable:hover::after { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Furix AI — Architecture Dashboard</h1>
+  <div class="legend">
+    <span><span class="legend-dot" style="background:#93c5fd"></span>Scanning</span>
+    <span><span class="legend-dot" style="background:#86efac"></span>Knowledge Graph</span>
+    <span><span class="legend-dot" style="background:#c4b5fd"></span>AI / Intelligence</span>
+    <span><span class="legend-dot" style="background:#e879f9"></span>Embeddings</span>
+    <span><span class="legend-dot" style="background:#7dd3fc"></span>UI / API</span>
+    <span><span class="legend-dot" style="background:#fde047"></span>Sync</span>
+    <span><span class="legend-dot" style="background:#fca5a5"></span>External</span>
+  </div>
+  <span><a href="graph-traversal.html" style="color:#7c3aed;text-decoration:none;font-weight:600;font-size:11px;">View Graph Traversal Demo &rarr;</a> &nbsp;|&nbsp; Click any module or arrow for details</span>
+</div>
+
+<div class="canvas" id="canvas">
+
+  <!-- Boundaries -->
+  <div class="boundary boundary-customer" id="bnd-customer">
+    <span class="boundary-label">Customer Network — On-Prem Appliance (9 containers)</span>
+  </div>
+  <div class="boundary boundary-cloud" id="bnd-cloud">
+    <span class="boundary-label">Furix Cloud (External)</span>
+  </div>
+
+  <!-- Intelligence Core zone -->
+  <div class="core-zone" id="core-zone">
+    <span class="core-zone-label">Intelligence Core</span>
+  </div>
+
+  <!-- ═══ NODES ═══ -->
+
+  <!-- TOP: Dashboard + API -->
+  <div class="node node-ui" id="n-dashboard">
+    <div class="node-icon">🖥</div>
+    <div class="node-title">Dashboard</div>
+    <div class="node-sub">React 18 + Graph Viz</div>
+  </div>
+  <div class="node node-ui" id="n-api">
+    <div class="node-icon">⚡</div>
+    <div class="node-title">API Server</div>
+    <div class="node-sub">FastAPI + AGE driver</div>
+  </div>
+
+  <!-- LEFT: Scan cluster -->
+  <div class="node node-scan node-expandable" id="n-scan">
+    <div class="node-icon">🔍</div>
+    <div class="node-title">Scan Engine</div>
+    <div class="node-sub">Python + Nmap</div>
+  </div>
+  <div class="node node-scan" id="n-checks">
+    <div class="node-icon">✅</div>
+    <div class="node-title">Check Library</div>
+    <div class="node-sub">~520 checks</div>
+  </div>
+  <div class="node node-scan" id="n-siem">
+    <div class="node-icon">📋</div>
+    <div class="node-title">SIEM Collector</div>
+    <div class="node-sub">Vector.dev</div>
+  </div>
+
+  <!-- CENTER-LEFT: Knowledge Graph (core) -->
+  <div class="node node-data node-core node-expandable" id="n-graph">
+    <div class="node-icon">🔮</div>
+    <div class="node-title">Security Knowledge Graph</div>
+    <div class="node-sub">PG 16 + AGE + pgvector</div>
+  </div>
+
+  <!-- CENTER-RIGHT: AI Brain (core) -->
+  <div class="node node-ai node-core" id="n-ai">
+    <div class="node-icon">🧠</div>
+    <div class="node-title">AI Brain</div>
+    <div class="node-sub">5 Agents + Orchestrator</div>
+  </div>
+
+  <!-- Redis -->
+  <div class="node node-data" id="n-redis">
+    <div class="node-icon">⚡</div>
+    <div class="node-title">Redis 7</div>
+    <div class="node-sub">Queue + Pub/Sub</div>
+  </div>
+
+  <!-- Around AI Brain -->
+  <div class="node node-ai" id="n-dal">
+    <div class="node-icon">🛡</div>
+    <div class="node-title">Data Abstraction</div>
+    <div class="node-sub">PII Stripping</div>
+  </div>
+  <div class="node node-ai" id="n-soar">
+    <div class="node-icon">🎯</div>
+    <div class="node-title">SOAR Playbooks</div>
+    <div class="node-sub">Auto Response</div>
+  </div>
+  <div class="node node-ai" id="n-iforest">
+    <div class="node-icon">📊</div>
+    <div class="node-title">Isolation Forest</div>
+    <div class="node-sub">Anomaly Detection</div>
+  </div>
+
+  <!-- Embedding service -->
+  <div class="node node-embed" id="n-embed">
+    <div class="node-icon">🔢</div>
+    <div class="node-title">Embedding Svc</div>
+    <div class="node-sub">BGE-small 384d</div>
+  </div>
+
+  <!-- BOTTOM: Sync -->
+  <div class="node node-security" id="n-sync">
+    <div class="node-icon">🔄</div>
+    <div class="node-title">Sync Agent</div>
+    <div class="node-sub">Go — mTLS</div>
+  </div>
+  <div class="node node-security" id="n-wizard">
+    <div class="node-icon">🧙</div>
+    <div class="node-title">Setup Wizard</div>
+    <div class="node-sub">First-run pairing</div>
+  </div>
+
+  <!-- RIGHT: External -->
+  <div class="node node-external" id="n-cloud">
+    <div class="node-icon">☁️</div>
+    <div class="node-title">Furix Cloud</div>
+    <div class="node-sub">License + Updates</div>
+  </div>
+  <div class="node node-external" id="n-nvd">
+    <div class="node-icon">🗂</div>
+    <div class="node-title">NVD Pipeline</div>
+    <div class="node-sub">CVE + EPSS + KEV</div>
+  </div>
+  <div class="node node-external" id="n-cdn">
+    <div class="node-icon">🌐</div>
+    <div class="node-title">CDN</div>
+    <div class="node-sub">CloudFront</div>
+  </div>
+  <div class="node node-external" id="n-claude">
+    <div class="node-icon">🤖</div>
+    <div class="node-title">Claude API</div>
+    <div class="node-sub">Anthropic</div>
+  </div>
+
+  <svg class="arrows" id="arrowsSvg"></svg>
+  <div class="arrow-label" id="arrowLabel"></div>
+</div>
+
+<!-- Panel -->
+<div class="panel-overlay" id="panelOverlay"></div>
+<div class="panel" id="panel">
+  <div class="panel-header">
+    <button class="panel-close" id="panelClose">&times;</button>
+    <h2 id="panelTitle"></h2>
+    <div id="panelBadges"></div>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<!-- Scan Engine Drill-down -->
+<div class="drilldown" id="scanDrilldown">
+  <div class="drilldown-bar">
+    <button class="drilldown-back" id="scanDdBack">&#8592; Architecture</button>
+    <h1>Scan Engine — Internal Architecture</h1>
+    <span>Click any sub-module or arrow for details</span>
+  </div>
+  <div class="drilldown-canvas" id="scanDdCanvas">
+    <!-- Zones -->
+    <div class="dd-zone dd-zone-drivers" id="zone-drivers"><span class="dd-zone-label">Protocol Drivers (Authenticated Sessions)</span></div>
+    <div class="dd-zone dd-zone-cloud" id="zone-cloud"><span class="dd-zone-label">Cloud Connectors (API Sessions)</span></div>
+    <div class="dd-zone dd-zone-checks" id="zone-checks"><span class="dd-zone-label">Check Execution (via Check Library · ~520 checks)</span></div>
+
+    <!-- Orchestration layer -->
+    <div class="node node-orch" id="se-orch">
+      <div class="node-icon">⚙️</div>
+      <div class="node-title">Scan Orchestrator</div>
+      <div class="node-sub">asyncio · 10 concurrent</div>
+    </div>
+    <div class="node node-orch" id="se-delta">
+      <div class="node-icon">⚡</div>
+      <div class="node-title">Delta Engine</div>
+      <div class="node-sub">Fingerprint diff · ~80% faster</div>
+    </div>
+
+    <!-- Protocol Drivers -->
+    <div class="node node-driver" id="se-nmap">
+      <div class="node-icon">🌐</div>
+      <div class="node-title">Nmap Wrapper</div>
+      <div class="node-sub">TCP SYN · Svc detect</div>
+    </div>
+    <div class="node node-driver" id="se-ssh">
+      <div class="node-icon">🐧</div>
+      <div class="node-title">SSH Connector</div>
+      <div class="node-sub">Linux / Unix</div>
+    </div>
+    <div class="node node-driver" id="se-winrm">
+      <div class="node-icon">🪟</div>
+      <div class="node-title">WinRM Connector</div>
+      <div class="node-sub">Windows · PS remoting</div>
+    </div>
+    <div class="node node-driver" id="se-snmp">
+      <div class="node-icon">📡</div>
+      <div class="node-title">SNMP Poller</div>
+      <div class="node-sub">v2c / v3 OID</div>
+    </div>
+
+    <!-- Cloud Connectors -->
+    <div class="node node-cloudconn" id="se-aws">
+      <div class="node-icon">☁️</div>
+      <div class="node-title">AWS Connector</div>
+      <div class="node-sub">boto3</div>
+    </div>
+    <div class="node node-cloudconn" id="se-azure">
+      <div class="node-icon">☁️</div>
+      <div class="node-title">Azure Connector</div>
+      <div class="node-sub">Azure SDK</div>
+    </div>
+    <div class="node node-cloudconn" id="se-gcp">
+      <div class="node-icon">☁️</div>
+      <div class="node-title">GCP Connector</div>
+      <div class="node-sub">GCP client lib</div>
+    </div>
+
+    <!-- Check Categories -->
+    <div class="node node-checkcat" id="se-cis-linux">
+      <div class="node-icon">🐧</div>
+      <div class="node-title">CIS Linux Checks</div>
+      <div class="node-sub">~150 benchmarks</div>
+    </div>
+    <div class="node node-checkcat" id="se-cis-windows">
+      <div class="node-icon">🪟</div>
+      <div class="node-title">CIS Windows Checks</div>
+      <div class="node-sub">~150 benchmarks</div>
+    </div>
+    <div class="node node-checkcat" id="se-net-audit">
+      <div class="node-icon">📡</div>
+      <div class="node-title">Network Audits</div>
+      <div class="node-sub">~80 config checks</div>
+    </div>
+    <div class="node node-checkcat" id="se-cloud-checks">
+      <div class="node-icon">☁️</div>
+      <div class="node-title">Cloud Checks</div>
+      <div class="node-sub">~100 config checks</div>
+    </div>
+
+    <!-- External References -->
+    <div class="node node-extref" id="se-redis">
+      <div class="node-icon">⚡</div>
+      <div class="node-title">Redis Queue</div>
+      <div class="node-sub">scan_jobs input</div>
+    </div>
+    <div class="node node-extref" id="se-graph">
+      <div class="node-icon">🔮</div>
+      <div class="node-title">Knowledge Graph</div>
+      <div class="node-sub">Write nodes + edges</div>
+    </div>
+
+    <svg class="arrows" id="scanArrowsSvg"></svg>
+    <div class="arrow-label" id="scanArrowLabel"></div>
+  </div>
+</div>
+
+<!-- Database Drill-down -->
+<div class="drilldown" id="dbDrilldown">
+  <div class="drilldown-bar">
+    <button class="drilldown-back" id="dbDdBack">&#8592; Architecture</button>
+    <h1>Security Knowledge Graph — Database Internals</h1>
+    <span>Single PostgreSQL 16 container · AGE + pgvector + TimescaleDB · Click any module for details</span>
+  </div>
+  <div class="drilldown-canvas" id="dbDdCanvas">
+    <!-- Zones -->
+    <div class="dd-zone dd-zone-storage" id="zone-storage"><span class="dd-zone-label">Storage Engines (inside PostgreSQL 16)</span></div>
+    <div class="dd-zone dd-zone-mgmt" id="zone-mgmt"><span class="dd-zone-label">Schema Management &amp; Operations</span></div>
+
+    <!-- Connection Pool -->
+    <div class="node node-dbpool" id="db-pool">
+      <div class="node-icon">🔌</div>
+      <div class="node-title">Connection Pool</div>
+      <div class="node-sub">asyncpg · 20-30 conn</div>
+    </div>
+
+    <!-- Storage Engines -->
+    <div class="node node-dbrelational" id="db-rel">
+      <div class="node-icon">📋</div>
+      <div class="node-title">Relational Schema</div>
+      <div class="node-sub">Users · Schedules · Audit</div>
+    </div>
+    <div class="node node-dbgraph" id="db-age">
+      <div class="node-icon">🔮</div>
+      <div class="node-title">AGE Graph Engine</div>
+      <div class="node-sub">13 nodes · 16 edges · Cypher</div>
+    </div>
+    <div class="node node-dbvector" id="db-pgvec">
+      <div class="node-icon">🔢</div>
+      <div class="node-title">pgvector Store</div>
+      <div class="node-sub">384d · ~15K chunks · cosine</div>
+    </div>
+    <div class="node node-dbtimescale" id="db-ts">
+      <div class="node-icon">📊</div>
+      <div class="node-title">TimescaleDB</div>
+      <div class="node-sub">siem_logs · scan_evidence</div>
+    </div>
+
+    <!-- Management -->
+    <div class="node node-dbmgmt" id="db-alembic">
+      <div class="node-icon">🔧</div>
+      <div class="node-title">Alembic Migrations</div>
+      <div class="node-sub">Schema versioning</div>
+    </div>
+    <div class="node node-dbmgmt" id="db-nvd">
+      <div class="node-icon">📥</div>
+      <div class="node-title">NVD Ingestion</div>
+      <div class="node-sub">JSON → Graph nodes</div>
+    </div>
+    <div class="node node-dbmgmt" id="db-index">
+      <div class="node-icon">⚡</div>
+      <div class="node-title">Index Strategy</div>
+      <div class="node-sub">B-tree · GiST · Graph</div>
+    </div>
+
+    <!-- External consumers -->
+    <div class="node node-extref" id="db-scaneng">
+      <div class="node-icon">🔍</div>
+      <div class="node-title">Scan Engine</div>
+      <div class="node-sub">Write-heavy</div>
+    </div>
+    <div class="node node-extref" id="db-aibrain">
+      <div class="node-icon">🧠</div>
+      <div class="node-title">AI Brain</div>
+      <div class="node-sub">Read + Write</div>
+    </div>
+    <div class="node node-extref" id="db-apiserver">
+      <div class="node-icon">⚡</div>
+      <div class="node-title">API Server</div>
+      <div class="node-sub">Read-heavy</div>
+    </div>
+    <div class="node node-extref" id="db-syncagent">
+      <div class="node-icon">🔄</div>
+      <div class="node-title">Sync Agent</div>
+      <div class="node-sub">CVE batch writes</div>
+    </div>
+
+    <svg class="arrows" id="dbArrowsSvg"></svg>
+    <div class="arrow-label" id="dbArrowLabel"></div>
+  </div>
+</div>
+
+<script>
+// ── RESPONSIVE LAYOUT ─────────────────────────────────
+
+const layout = {
+  // Top: UI layer
+  'n-dashboard':  { x: 0.34, y: 0.06 },
+  'n-api':        { x: 0.34, y: 0.22 },
+  // Left: Scanning
+  'n-scan':       { x: 0.06, y: 0.28 },
+  'n-checks':     { x: 0.03, y: 0.52 },
+  'n-siem':       { x: 0.06, y: 0.76 },
+  // Redis (event bus between left and center)
+  'n-redis':      { x: 0.22, y: 0.38 },
+  // ═══ INTELLIGENCE CORE ═══
+  'n-graph':      { x: 0.36, y: 0.52 },
+  'n-ai':         { x: 0.54, y: 0.46 },
+  // Embedding service (feeds into graph)
+  'n-embed':      { x: 0.36, y: 0.78 },
+  // Around AI Brain
+  'n-dal':        { x: 0.60, y: 0.24 },
+  'n-iforest':    { x: 0.62, y: 0.68 },
+  'n-soar':       { x: 0.50, y: 0.80 },
+  // Bottom: Sync
+  'n-sync':       { x: 0.24, y: 0.90 },
+  'n-wizard':     { x: 0.10, y: 0.93 },
+  // Right: External
+  'n-cloud':      { x: 0.82, y: 0.12 },
+  'n-nvd':        { x: 0.82, y: 0.38 },
+  'n-cdn':        { x: 0.82, y: 0.60 },
+  'n-claude':     { x: 0.82, y: 0.82 },
+};
+
+function positionNodes() {
+  const c = document.getElementById('canvas');
+  const W = c.clientWidth, H = c.clientHeight;
+
+  for (const [id, pos] of Object.entries(layout)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.style.left = (pos.x * W - el.offsetWidth / 2) + 'px';
+    el.style.top = (pos.y * H - el.offsetHeight / 2) + 'px';
+  }
+
+  // Customer boundary
+  const bc = document.getElementById('bnd-customer');
+  bc.style.left = (0.005 * W) + 'px'; bc.style.top = (0.01 * H) + 'px';
+  bc.style.width = (0.73 * W) + 'px'; bc.style.height = (0.975 * H) + 'px';
+
+  // Cloud boundary
+  const be = document.getElementById('bnd-cloud');
+  be.style.left = (0.755 * W) + 'px'; be.style.top = (0.01 * H) + 'px';
+  be.style.width = (0.24 * W) + 'px'; be.style.height = (0.975 * H) + 'px';
+
+  // Intelligence Core zone - wraps graph + AI brain
+  const graphEl = document.getElementById('n-graph');
+  const aiEl = document.getElementById('n-ai');
+  const cz = document.getElementById('core-zone');
+  const gL = graphEl.offsetLeft, gT = graphEl.offsetTop;
+  const aR = aiEl.offsetLeft + aiEl.offsetWidth, aB = aiEl.offsetTop + aiEl.offsetHeight;
+  const pad = 18;
+  cz.style.left = (gL - pad) + 'px';
+  cz.style.top = (Math.min(gT, aiEl.offsetTop) - pad) + 'px';
+  cz.style.width = (aR - gL + pad * 2) + 'px';
+  cz.style.height = (Math.max(aB, graphEl.offsetTop + graphEl.offsetHeight) - Math.min(gT, aiEl.offsetTop) + pad * 2) + 'px';
+}
+
+// ── NODE DATA ─────────────────────────────────────────
+
+const nodes = {
+  'n-dashboard': {
+    title: 'Dashboard',
+    badges: [{text:'Container: dashboard', color:'#dbeafe'}, {text:'Port 443', color:'#fef3c7'}],
+    tech: 'React 18, Vite, Shadcn/ui, Tailwind, Recharts',
+    body: `
+<h3>Role</h3>
+<p>Customer-facing web UI with graph-powered visualizations. Real-time updates via WebSocket.</p>
+<h3>Pages (Graph-Enhanced)</h3>
+<table>
+<tr><th>Page</th><th>Graph Features</th></tr>
+<tr><td>Home</td><td>Risk trend, scan summary, top findings</td></tr>
+<tr><td>Scans</td><td>Schedule, trigger, live progress via WebSocket</td></tr>
+<tr><td>Assets</td><td><strong>Network topology visualization</strong> from CONNECTS_TO edges</td></tr>
+<tr><td>Risk Scoring</td><td>AI scores + <strong>blast radius visualization</strong> per finding</td></tr>
+<tr><td>Reports</td><td>4 types, PDF, scheduled/on-demand</td></tr>
+<tr><td>AI Actions</td><td>Approve/reject + <strong>remediation impact preview</strong> from graph</td></tr>
+<tr><td>SIEM / Alerts</td><td>Log search + <strong>graph-correlated context</strong> per alert</td></tr>
+<tr><td>Settings</td><td>Users, RBAC, schedules, Claude toggle</td></tr>
+</table>`
+  },
+  'n-api': {
+    title: 'API Server',
+    badges: [{text:'Container: dashboard', color:'#dbeafe'}, {text:'FastAPI + AGE driver', color:'#d1fae5'}],
+    tech: 'FastAPI, JWT, SQLAlchemy + AGE driver, WebSocket',
+    body: `
+<h3>Role</h3>
+<p>Backend for the Dashboard. Now uses both SQL and Cypher queries. RBAC tag scopes filter both SQL and Cypher results.</p>
+<h3>RBAC (Two-Axis)</h3>
+<ul>
+<li><strong>Role axis:</strong> Admin / Analyst / Viewer — what user can DO</li>
+<li><strong>Tag scope axis:</strong> Filters every query (SQL and Cypher) — what user can SEE</li>
+<li><code>allowed = role.hasCapability(action) AND scope.coversResource(resource)</code></li>
+</ul>
+<h3>Graph-Powered Endpoints (NEW)</h3>
+<table>
+<tr><th>Endpoint</th><th>Graph Query</th></tr>
+<tr><td><code>GET /assets/:id/blast-radius</code></td><td>CONNECTS_TO traversal N hops</td></tr>
+<tr><td><code>GET /findings/:id/context</code></td><td>Full graph context the AI Brain used</td></tr>
+<tr><td><code>GET /compliance/:framework/gaps</code></td><td>Control gap analysis traversal</td></tr>
+<tr><td><code>GET /attack-paths</code></td><td>Matched attack chain patterns</td></tr>
+</table>
+<h3>Standard Endpoints</h3>
+<p>Auth, scan CRUD, asset/finding CRUD, AI action approve/reject, reports, SIEM search, WebSocket <code>/ws/live</code>.</p>`
+  },
+  'n-scan': {
+    title: 'Scan Engine',
+    badges: [{text:'Container: scan-engine', color:'#dbeafe'}, {text:'1 vCPU / 2GB', color:'#fef3c7'}],
+    tech: 'Python 3.12, Nmap 7.94, asyncio, AGE driver',
+    body: `
+<h3>Role</h3>
+<p>Orchestrates scanning. Now writes findings as <strong>graph nodes with relationships</strong> instead of flat table rows.</p>
+<h3>Protocol Drivers</h3>
+<table>
+<tr><th>Driver</th><th>Targets</th><th>Method</th></tr>
+<tr><td>SSH</td><td>Linux, network devices</td><td>SSH session</td></tr>
+<tr><td>WinRM</td><td>Windows servers</td><td>PowerShell remoting</td></tr>
+<tr><td>SNMP</td><td>Switches, firewalls, routers</td><td>SNMP v2c/v3</td></tr>
+<tr><td>Cloud API</td><td>AWS, Azure, GCP</td><td>Boto3, Azure SDK, GCP client</td></tr>
+<tr><td>SaaS API</td><td>O365, Google Workspace</td><td>Graph API, Admin SDK</td></tr>
+</table>
+<h3>Graph Writes</h3>
+<p><strong>Nodes created/updated:</strong> Asset, Software, Finding, ScanRun</p>
+<p><strong>Edges created/updated:</strong></p>
+<ul>
+<li><code>Asset --RUNS--&gt; Software</code></li>
+<li><code>Asset --HAS_FINDING--&gt; Finding</code></li>
+<li><code>Asset --CONNECTS_TO--&gt; Asset</code> (network topology)</li>
+<li><code>Finding --ASSOCIATED_CVE--&gt; CVE</code></li>
+<li><code>Finding --DETECTED_BY--&gt; Check</code></li>
+<li><code>Finding --FOUND_IN--&gt; ScanRun</code></li>
+<li><code>Software --HAS_CVE--&gt; CVE</code></li>
+</ul>
+<h3>Scan Lifecycle</h3>
+<ol>
+<li>Job from Redis queue</li>
+<li>Driver selection → connection → check execution</li>
+<li>Normalize → <strong>Graph write</strong> (Finding node + edges to Asset, CVE, Check, ScanRun)</li>
+<li>Event to Redis <code>findings:new</code> with Finding node IDs</li>
+</ol>
+<h3>Delta Scan</h3>
+<p>State fingerprint per asset. Delta re-runs only changed components. ~80% time reduction.</p>`
+  },
+  'n-checks': {
+    title: 'Check Library',
+    badges: [{text:'~520 checks', color:'#dbeafe'}, {text:'Graph-linked', color:'#d1fae5'}],
+    tech: 'Python classes — each check exists as a Check node in the graph',
+    body: `
+<h3>Role</h3>
+<p>~520 security checks. Each check definition exists as a <code>Check</code> node in the graph with edges to <code>Framework</code>, <code>Control</code>, and <code>AssetType</code> nodes.</p>
+<h3>Graph Benefit</h3>
+<p>Queries like "all failing CIS checks across Linux servers" are single graph traversals instead of multi-table JOINs.</p>
+<h3>Distribution</h3>
+<table>
+<tr><th>Asset Type</th><th>Count</th></tr>
+<tr><td>CIS v8.1 Linux</td><td>~150</td></tr>
+<tr><td>CIS v8.1 Windows</td><td>~150</td></tr>
+<tr><td>Network Devices</td><td>~80</td></tr>
+<tr><td>Cloud Resources</td><td>~100</td></tr>
+<tr><td>SaaS Tenants</td><td>~40</td></tr>
+</table>`
+  },
+  'n-redis': {
+    title: 'Redis 7',
+    badges: [{text:'Container: redis', color:'#dbeafe'}, {text:'256MB', color:'#fef3c7'}, {text:'No persistence', color:'#fee2e2'}],
+    tech: 'Redis 7, alpine, no persistence',
+    body: `
+<h3>Role</h3>
+<p>Event bus connecting modules. Job queue for scan scheduling + pub/sub for inter-module events.</p>
+<h3>Queue</h3>
+<p><code>scan_jobs</code> — API Server enqueues, Scan Engine dequeues.</p>
+<h3>Pub/Sub Channels</h3>
+<table>
+<tr><th>Channel</th><th>Publisher</th><th>Subscriber</th><th>Payload</th></tr>
+<tr><td>findings:new</td><td>Scan Engine</td><td>AI Brain</td><td>Finding node IDs</td></tr>
+<tr><td>anomaly:detected</td><td>Isolation Forest</td><td>Anomaly Explainer</td><td>Data + baseline</td></tr>
+<tr><td>alert:fired</td><td>SIEM</td><td>Dashboard + AI Brain</td><td>Alert node ID</td></tr>
+<tr><td>report:requested</td><td>API Server</td><td>Report Generator</td><td>Type + params</td></tr>
+<tr><td>remediation:requested</td><td>API Server</td><td>Remediation Generator</td><td>Finding node ID</td></tr>
+</table>`
+  },
+  'n-graph': {
+    title: 'Security Knowledge Graph',
+    badges: [{text:'Container: postgresql', color:'#dbeafe'}, {text:'PG 16 + AGE + pgvector', color:'#d1fae5'}, {text:'80GB', color:'#fef3c7'}],
+    tech: 'PostgreSQL 16 + Apache AGE (Cypher) + pgvector (384d embeddings)',
+    body: `
+<h3>Role</h3>
+<p>The system's memory. All entities, relationships, and accumulated intelligence as a <strong>property graph</strong>. Single DB process — Cypher for traversal, SQL for tabular, pgvector for semantic search.</p>
+<h3>Why Graph (Not Flat Tables)</h3>
+<p>A flat finding is a dead row. In the graph, Finding #4721 knows the asset is internet-facing, stores PII, the CVE is KEV-listed, enables ATT&CK T1190, and connects to 3 internal servers — one with its own critical finding. "Blast radius if compromised?" is a graph walk, not 7+ JOINs.</p>
+<h3>Node Types (13)</h3>
+<table>
+<tr><th>Node</th><th>Created By</th></tr>
+<tr><td>Asset, Software, Finding, ScanRun</td><td>Scan Engine</td></tr>
+<tr><td>CVE, Patch, Technique</td><td>Sync Agent (NVD + ATT&CK)</td></tr>
+<tr><td>Control, Framework</td><td>Sync Agent + Seed data</td></tr>
+<tr><td>Check</td><td>Check Library import</td></tr>
+<tr><td>Alert</td><td>SIEM Collector</td></tr>
+<tr><td>AIAction</td><td>AI Brain</td></tr>
+<tr><td>DataClass, NetworkZone</td><td>Admin config</td></tr>
+</table>
+<h3>Edge Types (16)</h3>
+<table>
+<tr><th>Edge</th><th>Meaning</th></tr>
+<tr><td>RUNS, HAS_FINDING, CONNECTS_TO</td><td>Asset relationships</td></tr>
+<tr><td>EXPOSED_TO, STORES, DEPENDS_ON</td><td>Asset context</td></tr>
+<tr><td>ASSOCIATED_CVE, HAS_CVE</td><td>Vulnerability links</td></tr>
+<tr><td>MITIGATED_BY, ENABLES</td><td>CVE → Patch, CVE → Technique</td></tr>
+<tr><td>MAPS_TO, BELONGS_TO, DETECTED_BY</td><td>Compliance + check lineage</td></tr>
+<tr><td>FOUND_IN, TRIGGERED, CORRELATED_WITH</td><td>Audit + alert correlation</td></tr>
+<tr><td>RECOMMENDED_BY, LEADS_TO</td><td>AI actions + attack chains</td></tr>
+</table>
+<h3>Key Graph Queries</h3>
+<ul>
+<li><strong>Blast radius:</strong> Walk CONNECTS_TO N hops from compromised asset</li>
+<li><strong>Attack paths:</strong> Internet-facing asset → CVE → ENABLES technique → CONNECTS_TO → next CVE</li>
+<li><strong>Compliance gaps:</strong> Framework → Controls → which have MAPS_TO from open Findings</li>
+<li><strong>Remediation impact:</strong> Patch → mitigates CVEs → affect Software → run on Assets</li>
+<li><strong>Recurring patterns:</strong> Same Check failing across many Assets = systemic issue</li>
+</ul>
+<h3>Graph Size (25 assets, 3 months)</h3>
+<p>~253K nodes (CVEs dominate at ~250K), ~1.2M edges, ~8-12GB disk. Hot paths fit in 4GB RAM buffer.</p>
+<h3>Relational Tables (Alongside Graph)</h3>
+<p>Operational data stays as flat tables: users, scan_evidence, siem_logs, alert_rules, scan_schedules, sync_state, audit_log, compliance_chunks (pgvector).</p>`
+  },
+  'n-ai': {
+    title: 'AI Brain — Central Intelligence',
+    badges: [{text:'Container: ai-engine', color:'#dbeafe'}, {text:'1 vCPU / 2GB', color:'#fef3c7'}, {text:'5 Agents', color:'#ede9fe'}],
+    tech: 'Python 3.12, scikit-learn, httpx, Apache AGE Python driver',
+    body: `
+<h3>Role</h3>
+<p>The graph is the AI Brain's memory. Agents <strong>read rich context from the graph before reasoning</strong>, then <strong>write intelligence back</strong>. Every finding, alert, and report passes through.</p>
+<h3>Orchestrator</h3>
+<ul>
+<li>Thread pool: 4 threads</li>
+<li><strong>Graph query layer:</strong> Pre-built Cypher queries per agent for context gathering</li>
+<li>Batch manager: 10-20 findings per prompt (5-8x cost savings)</li>
+<li>Timeout: 30s, Retry: 3x with 60s delay</li>
+<li>Fallback: deterministic formula + <code>ai_enrichment=failed</code> on Finding node</li>
+</ul>
+<h3>Agent 1: Risk Scorer</h3>
+<p><strong>Graph reads:</strong> 4-hop from Finding — Asset (criticality, exposure, data class) → CVE (CVSS, EPSS, KEV) → Technique (ATT&CK) → neighboring Assets via CONNECTS_TO (blast radius). Checks attack chains.</p>
+<p><strong>Graph writes:</strong> <code>ai_risk_score</code>, <code>ai_risk_justification</code> as properties on Finding node.</p>
+<h3>Agent 2: Compliance Mapper</h3>
+<p><strong>Graph reads:</strong> Finding → Check → static mappings (80%). Ambiguous 20%: candidate Controls + <strong>pgvector similarity</strong> on compliance_chunks.</p>
+<p><strong>Graph writes:</strong> New <code>MAPS_TO</code> edges (Finding → Control) with <code>mapping_type='ai'</code>, confidence, explanation.</p>
+<h3>Agent 3: Remediation Generator</h3>
+<p><strong>Graph reads:</strong> Finding → CVE → Patches + Asset → Software + CONNECTS_TO (impact: "fixing this resolves N CVEs across M assets").</p>
+<p><strong>Graph writes:</strong> <code>AIAction</code> node + <code>RECOMMENDED_BY</code> edge + edges to affected Assets.</p>
+<h3>Agent 4: Anomaly Explainer</h3>
+<p><strong>Graph reads:</strong> Asset → last N ScanRun nodes. Neighboring assets (isolated or systemic?).</p>
+<p><strong>Graph writes:</strong> Explanation on Finding/Alert node. If dangerous, creates AIAction.</p>
+<h3>Agent 5: Report Generator</h3>
+<p><strong>Graph reads:</strong> Full tenant traversal — Assets by criticality, Findings by severity, Controls (gap analysis), ScanRun trend, AIAction completion.</p>
+<p>4 types: Executive, Technical, Compliance, Trend. HTML → PDF via headless Chromium.</p>`
+  },
+  'n-dal': {
+    title: 'Data Abstraction Layer',
+    badges: [{text:'Inside ai-engine', color:'#ede9fe'}, {text:'~5ms latency', color:'#d1fae5'}],
+    tech: 'Python, regex, in-memory mapping dict',
+    body: `
+<h3>Role</h3>
+<p>PII stripping between AI Brain and Claude API. Customer data never reaches Claude identifiable.</p>
+<h3>Abstraction Rules</h3>
+<table>
+<tr><th>Data Type</th><th>Original</th><th>Abstracted</th></tr>
+<tr><td>Internal IPs</td><td>192.168.1.50</td><td>[INTERNAL_IP_1]</td></tr>
+<tr><td>Hostnames</td><td>prod-db-01</td><td>[SERVER_1] (database)</td></tr>
+<tr><td>Company/domains</td><td>acme.com</td><td>[ORG] / [DOMAIN_1]</td></tr>
+<tr><td>Credentials</td><td>sk_live_abc...</td><td>[REDACTED]</td></tr>
+</table>
+<p>Response de-abstracted before writing to graph. Every abstracted prompt logged locally.</p>`
+  },
+  'n-soar': {
+    title: 'SOAR Playbooks',
+    badges: [{text:'Inside ai-engine', color:'#ede9fe'}, {text:'Phase 2', color:'#fee2e2'}],
+    tech: 'Python, reuses Scan Engine drivers',
+    body: `
+<h3>Role</h3>
+<p>Automated response actions. All actions become <code>AIAction</code> nodes in the graph with <code>status=pending</code>.</p>
+<h3>Playbooks</h3>
+<table>
+<tr><th>Playbook</th><th>Action</th></tr>
+<tr><td>Block IP</td><td>SSH to firewall → deny rule</td></tr>
+<tr><td>Disable Account</td><td>WinRM/SSH → disable</td></tr>
+<tr><td>Quarantine VM</td><td>Cloud API → isolate security group</td></tr>
+</table>
+<p>Customer approves in dashboard. <code>auto_execute</code> per playbook, off by default.</p>`
+  },
+  'n-iforest': {
+    title: 'Isolation Forest',
+    badges: [{text:'scikit-learn', color:'#ede9fe'}, {text:'Not an LLM', color:'#fef3c7'}],
+    tech: 'scikit-learn IsolationForest — per-asset anomaly detection',
+    body: `
+<h3>Role</h3>
+<p>Statistical anomaly detection. Trains on per-asset scan history after 2 weeks of baseline.</p>
+<h3>Features</h3>
+<ul>
+<li>Port count, process count, failed logins, new accounts, config changes</li>
+</ul>
+<p>Fires on ~5% of results → publishes to Redis → AI Brain's Anomaly Explainer interprets.</p>`
+  },
+  'n-embed': {
+    title: 'Embedding Service',
+    badges: [{text:'Container: embedding-svc', color:'#dbeafe'}, {text:'0.5 vCPU / 1GB', color:'#fef3c7'}, {text:'BGE-small-en-v1.5', color:'#f5d0fe'}],
+    tech: 'BGE-small-en-v1.5 (384-dim), ~15K compliance chunks',
+    body: `
+<h3>Role</h3>
+<p>Generates embeddings for the Compliance RAG system. CIS v8.1, ISO 27001, NIST CSF, SOC 2, HIPAA, PCI DSS chunked into ~15K text chunks, each embedded with 384-dim vectors.</p>
+<h3>How It's Used</h3>
+<ul>
+<li><strong>Compliance Mapper agent:</strong> Embeds ambiguous finding description → top-K similar compliance chunks → includes in Claude prompt for mapping</li>
+<li><strong>Report Generator agent:</strong> Pulls relevant framework language per control gap</li>
+</ul>
+<h3>Graph Integration</h3>
+<p>Each chunk in <code>compliance_chunks</code> table (pgvector) links to its source <code>Control</code> and <code>Framework</code> nodes in the graph — seamless traversal from Finding → MAPS_TO → Control → compliance chunk text.</p>
+<h3>Storage</h3>
+<p>Vectors stored in PostgreSQL <code>compliance_chunks</code> table using pgvector extension. Models volume for the BGE-small model weights.</p>`
+  },
+  'n-siem': {
+    title: 'SIEM Collector',
+    badges: [{text:'Container: siem-collector', color:'#dbeafe'}, {text:'Ports 514/1514', color:'#fef3c7'}],
+    tech: 'Vector.dev (Rust, ~50MB), SQL polling 60s',
+    body: `
+<h3>Role</h3>
+<p>Ingests logs, normalizes, stores in PostgreSQL. Runs alert rules every 60s. Now writes <strong>Alert nodes to the graph</strong> with correlation edges.</p>
+<h3>Sources (~52K events/day)</h3>
+<table>
+<tr><th>Source</th><th>Method</th><th>Volume</th></tr>
+<tr><td>Linux syslog</td><td>UDP 514 / TCP+TLS 1514</td><td>~15K/day</td></tr>
+<tr><td>Windows Events</td><td>WinRM pull (5 min)</td><td>~4K/day</td></tr>
+<tr><td>Firewall logs</td><td>Syslog push</td><td>~6K/day</td></tr>
+<tr><td>Cloud audit</td><td>API pull (5 min)</td><td>~1K/day</td></tr>
+<tr><td>Web logs</td><td>SSH → journalctl</td><td>~20K/day</td></tr>
+</table>
+<h3>Alert Rules</h3>
+<ul>
+<li><strong>Threshold:</strong> Count > X in Y min (brute force, port scan)</li>
+<li><strong>Absence:</strong> No event for X hours (offline, log broken)</li>
+<li><strong>Correlation:</strong> Joins siem_logs + <strong>graph data</strong> (e.g., failed VPN + SSH + target has critical finding)</li>
+</ul>
+<h3>Graph Integration (NEW)</h3>
+<p>Alert fires → <code>Alert</code> node + <code>TRIGGERED</code> edge to Asset + <code>CORRELATED_WITH</code> edge to relevant Findings. AI Brain then traverses Alert → Asset → Findings, CVEs, network position for triage context.</p>`
+  },
+  'n-sync': {
+    title: 'Sync Agent',
+    badges: [{text:'Container: sync-agent', color:'#dbeafe'}, {text:'Go 1.22', color:'#d1fae5'}, {text:'mTLS', color:'#fef3c7'}],
+    tech: 'Go 1.22, 15MB binary, mTLS, signed manifests',
+    body: `
+<h3>Role</h3>
+<p>ONLY internet-facing component. Outbound HTTPS only. Now writes <strong>graph nodes</strong> for threat intelligence.</p>
+<h3>Jobs</h3>
+<table>
+<tr><th>Job</th><th>Frequency</th></tr>
+<tr><td>Heartbeat</td><td>Every 6h — license + version check</td></tr>
+<tr><td>Threat Feed Sync</td><td>Every 6h — CVE deltas → <strong>graph nodes</strong></td></tr>
+<tr><td>Software Updates</td><td>On detection — stage → approve → rolling restart</td></tr>
+<tr><td>Compliance Sync</td><td>Quarterly — <strong>Control nodes + pgvector chunks</strong></td></tr>
+<tr><td>Cert Rotation</td><td>30 days pre-expiry</td></tr>
+<tr><td>Telemetry</td><td>Daily (opt-in)</td></tr>
+</table>
+<h3>Graph Writes (NEW)</h3>
+<p>CVE deltas → upsert <code>CVE</code> nodes, <code>Patch</code> nodes, <code>HAS_CVE</code> edges, <code>MITIGATED_BY</code> edges, <code>ENABLES</code> edges (ATT&CK), <code>Control</code> nodes. Post-sync notifies AI Brain to re-evaluate open findings.</p>
+<h3>Security</h3>
+<p>mTLS, pinned CA, signed manifests, non-root, hardware-bound cert.</p>`
+  },
+  'n-wizard': {
+    title: 'Setup Wizard',
+    badges: [{text:'Container: setup-wizard', color:'#dbeafe'}, {text:'Port 8443', color:'#fef3c7'}, {text:'Pre-pairing only', color:'#fee2e2'}],
+    tech: 'Minimal container, serves setup UI',
+    body: `
+<h3>Pairing Flow</h3>
+<ol>
+<li>Token (16-char, 24hr, single-use) → enter in wizard</li>
+<li>Sync Agent sends token + CSR to Cloud</li>
+<li>Cloud validates → returns mTLS cert, UUID, CA cert</li>
+<li>Full NVD snapshot (~180MB) → graph bootstrap</li>
+<li>Wizard disappears — endpoint returns 404</li>
+</ol>`
+  },
+  'n-cloud': {
+    title: 'Furix Cloud',
+    badges: [{text:'AWS', color:'#fee2e2'}, {text:'~$50-175/mo', color:'#fef3c7'}, {text:'Zero customer data', color:'#d1fae5'}],
+    tech: 't3.medium EC2s, S3, CloudFront, ECR',
+    body: `
+<h3>Role</h3>
+<p>Thin external backend. <strong>Zero customer data.</strong></p>
+<h3>Components</h3>
+<table>
+<tr><th>Component</th><th>Purpose</th></tr>
+<tr><td>License Server</td><td>Pairing, subscription, feature flags</td></tr>
+<tr><td>Master NVD Graph</td><td>PG + AGE, global dataset, delta generation</td></tr>
+<tr><td>CloudFront CDN</td><td>Delta + image distribution</td></tr>
+<tr><td>ECR</td><td>Docker images, multi-arch</td></tr>
+<tr><td>Compliance Store</td><td>Pre-chunked framework docs</td></tr>
+</table>
+<p>All threat feeds free: NVD, CVE.org, MITRE ATT&CK, EPSS, CISA KEV.</p>`
+  },
+  'n-nvd': {
+    title: 'NVD Sync Pipeline',
+    badges: [{text:'Two-stage pipeline', color:'#fee2e2'}],
+    tech: 'Daily ingestion → graph delta distribution',
+    body: `
+<h3>Cloud Ingestion (daily 2 AM UTC)</h3>
+<p>Pull NVD modified feed (~200 CVEs), CVE.org delta, EPSS scores, CISA KEV, parse CPE mappings, auto-map CIS/NIST controls, generate compressed delta (2-15MB), upload to S3.</p>
+<h3>Appliance Application</h3>
+<p>Sync Agent pulls → verify checksum → <strong>graph upserts in single transaction</strong> (CVE nodes, Patch nodes, HAS_CVE edges, MITIGATED_BY edges, ENABLES edges) → notify AI Brain for re-evaluation.</p>
+<h3>Bootstrap</h3>
+<p>New appliance gets full snapshot (~180MB) → graph bootstrap instead of deltas.</p>`
+  },
+  'n-cdn': {
+    title: 'CDN (CloudFront)',
+    badges: [{text:'AWS CloudFront', color:'#fee2e2'}, {text:'Signed URLs', color:'#fef3c7'}],
+    tech: 'CloudFront CDN with signed URLs',
+    body: `
+<h3>Role</h3>
+<p>Distributes delta packages and Docker images globally.</p>
+<ul>
+<li>Daily CVE graph deltas (2-15MB)</li>
+<li>Full NVD graph snapshots (~180MB, weekly)</li>
+<li>Docker image layers</li>
+<li>Compliance doc + embedding packages (quarterly)</li>
+</ul>`
+  },
+  'n-claude': {
+    title: 'Claude API (Anthropic)',
+    badges: [{text:'External API', color:'#fee2e2'}, {text:'Optional', color:'#fef3c7'}],
+    tech: 'Anthropic Claude API — all prompts PII-stripped via Data Abstraction Layer',
+    body: `
+<h3>Role</h3>
+<p>LLM reasoning for all 5 AI Brain agents. Receives <strong>graph-derived context</strong> (not raw data). All PII-stripped.</p>
+<h3>Used By</h3>
+<ul>
+<li><strong>Risk Scorer:</strong> Graph context (4-hop) → compositional risk reasoning</li>
+<li><strong>Compliance Mapper:</strong> Candidate controls + pgvector chunks → confirm mappings</li>
+<li><strong>Remediation Generator:</strong> CVE + Patch + impact graph → step-by-step fixes</li>
+<li><strong>Anomaly Explainer:</strong> Baseline + deviation → why + danger level</li>
+<li><strong>Report Generator:</strong> Full tenant graph traversal → narrative synthesis</li>
+</ul>
+<h3>Fallback</h3>
+<p>If unavailable: deterministic scoring, <code>ai_enrichment=failed</code> flag on Finding node. Nothing breaks.</p>`
+  }
+};
+
+// ── CONNECTIONS ────────────────────────────────────────
+
+const connections = [
+  { from: 'n-dashboard', to: 'n-api', label: 'REST + WebSocket', detail: 'Dashboard makes REST calls including new graph-powered endpoints (blast-radius, attack-paths, compliance gaps). WebSocket for real-time events.' },
+  { from: 'n-api', to: 'n-redis', label: 'Enqueue scan jobs', detail: 'Enqueues scan jobs to Redis. Subscribes to pub/sub for WebSocket relay to browser clients.' },
+  { from: 'n-api', to: 'n-graph', label: 'SQL + Cypher queries', detail: 'Uses both SQLAlchemy and AGE driver. RBAC tag scopes filter both SQL and Cypher queries. New endpoints: /blast-radius, /attack-paths, /compliance/gaps, /findings/:id/context.' },
+  { from: 'n-scan', to: 'n-redis', label: 'Dequeue + publish', detail: 'Polls scan_jobs queue. Publishes to findings:new with Finding node IDs (not row IDs).' },
+  { from: 'n-scan', to: 'n-graph', label: 'Write graph nodes', detail: 'Creates/updates graph nodes: Asset, Software, Finding, ScanRun. Creates edges: RUNS, HAS_FINDING, CONNECTS_TO (topology), ASSOCIATED_CVE, DETECTED_BY, FOUND_IN, HAS_CVE.' },
+  { from: 'n-scan', to: 'n-checks', label: 'Executes checks', detail: 'Loads Check Library classes over live sessions. Each check is also a Check node in the graph with edges to Framework and Control nodes.' },
+  { from: 'n-ai', to: 'n-redis', label: 'Subscribe to events', detail: 'Subscribes to: findings:new, anomaly:detected, report:requested, remediation:requested, alert:fired.' },
+  { from: 'n-ai', to: 'n-graph', label: 'Read context + write intelligence', detail: 'THE CORE LOOP: Agents read rich graph context (4-hop traversals, blast radius, attack chains) before reasoning with Claude. Then write back: ai_risk_score on Finding nodes, MAPS_TO edges, AIAction nodes, RECOMMENDED_BY edges. The graph accumulates intelligence over time.' },
+  { from: 'n-ai', to: 'n-dal', label: 'All prompts pass through', detail: 'Every prompt is PII-stripped by Data Abstraction Layer. Graph-derived context (node properties, edge relationships) is abstracted before reaching Claude.' },
+  { from: 'n-dal', to: 'n-claude', label: 'Abstracted prompts', detail: 'PII-stripped, graph-derived context sent to Claude API. ~5ms abstraction overhead vs 1-3s API round-trip.' },
+  { from: 'n-iforest', to: 'n-redis', label: 'Publish anomalies', detail: 'Publishes to anomaly:detected with anomalous data point + baseline distribution.' },
+  { from: 'n-iforest', to: 'n-ai', label: 'Feeds Anomaly Explainer', detail: 'Flags statistical anomalies. AI Brain reads Asset graph context (neighboring assets, ScanRun history) to determine if isolated or systemic.' },
+  { from: 'n-siem', to: 'n-graph', label: 'Write Alert nodes', detail: 'Alert fires → Alert node in graph + TRIGGERED edge to Asset + CORRELATED_WITH edge to relevant Findings. Correlation rules now join siem_logs with graph data.' },
+  { from: 'n-siem', to: 'n-redis', label: 'alert:fired', detail: 'Publishes alert node ID to Redis. Dashboard receives via WebSocket. AI Brain traverses Alert → Asset → Findings for triage.' },
+  { from: 'n-sync', to: 'n-graph', label: 'Write CVE/Patch/Technique nodes', detail: 'CVE deltas → upsert CVE nodes, Patch nodes, HAS_CVE edges, MITIGATED_BY edges, ENABLES edges (ATT&CK mapping), Control nodes. Post-sync notifies AI Brain to re-evaluate.' },
+  { from: 'n-sync', to: 'n-cloud', label: 'Heartbeat (mTLS)', detail: 'Every 6h: POST health, GET license + versions. mTLS, cert pinning, hardware-bound cert.' },
+  { from: 'n-sync', to: 'n-cdn', label: 'Pull graph deltas', detail: 'Downloads CVE graph delta packages (2-15MB) and Docker images. Verifies SHA-256. Compliance sync includes Control nodes + pgvector chunks.' },
+  { from: 'n-cloud', to: 'n-nvd', label: 'Daily ingestion', detail: 'Pulls from NVD, CVE.org, EPSS, CISA KEV, MITRE ATT&CK daily at 2 AM UTC. Generates graph delta packages.' },
+  { from: 'n-cloud', to: 'n-cdn', label: 'Publishes packages', detail: 'Uploads graph delta packages and Docker images to S3/CloudFront.' },
+  { from: 'n-wizard', to: 'n-sync', label: 'Pairing token', detail: 'Passes pairing token → Sync Agent → Cloud → mTLS cert + UUID → full NVD graph snapshot bootstrap (~180MB).' },
+  { from: 'n-soar', to: 'n-scan', label: 'Reuses drivers', detail: 'Reuses SSH/WinRM/Cloud API drivers. Actions become AIAction nodes in graph with status=pending.' },
+  { from: 'n-ai', to: 'n-soar', label: 'Triggers playbooks', detail: 'Creates AIAction nodes with RECOMMENDED_BY edges to Findings + edges to affected Asset nodes. Customer approves in dashboard.' },
+  { from: 'n-embed', to: 'n-graph', label: 'Vectors → pgvector', detail: 'Embeds ~15K compliance chunks (CIS, ISO 27001, NIST, SOC 2, HIPAA, PCI DSS) into 384-dim vectors stored in compliance_chunks table. Each chunk links to Control and Framework graph nodes.' },
+  { from: 'n-ai', to: 'n-embed', label: 'Compliance RAG queries', detail: 'Compliance Mapper embeds finding description → top-K similar compliance chunks via pgvector → includes in Claude prompt. Report Generator pulls relevant framework language per control gap.' },
+];
+
+// ── RENDERING ─────────────────────────────────────────
+
+function getCenter(id) {
+  const el = document.getElementById(id);
+  if (!el) return {x:0,y:0};
+  return { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 };
+}
+
+function buildPath(from, to) {
+  const a = getCenter(from), b = getCenter(to);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist === 0) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const curve = Math.min(dist * 0.12, 30);
+  const nx = -dy / dist * curve, ny = dx / dist * curve;
+  return `M ${a.x} ${a.y} Q ${mx + nx} ${my + ny} ${b.x} ${b.y}`;
+}
+
+function drawArrows() {
+  const svg = document.getElementById('arrowsSvg');
+  svg.innerHTML = '<defs><marker id="ah" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#94a3b8"/></marker><marker id="ah-a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3b82f6"/></marker></defs>';
+  connections.forEach((c, i) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', buildPath(c.from, c.to));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#b0b8c4');
+    path.setAttribute('stroke-width', '1.2');
+    path.setAttribute('marker-end', 'url(#ah)');
+    path.setAttribute('data-idx', i);
+    path.addEventListener('click', (e) => { e.stopPropagation(); openArrowPanel(i); });
+    path.addEventListener('mouseenter', (e) => showLabel(e, c.label));
+    path.addEventListener('mouseleave', hideLabel);
+    svg.appendChild(path);
+  });
+}
+
+function showLabel(e, text) {
+  const lbl = document.getElementById('arrowLabel');
+  const r = document.getElementById('canvas').getBoundingClientRect();
+  lbl.textContent = text;
+  lbl.style.left = (e.clientX - r.left + 10) + 'px';
+  lbl.style.top = (e.clientY - r.top - 28) + 'px';
+  lbl.classList.add('visible');
+}
+function hideLabel() { document.getElementById('arrowLabel').classList.remove('visible'); }
+
+function openPanel(id) {
+  if (id === 'n-scan') { openScanDrilldown(); return; }
+  if (id === 'n-graph') { openDbDrilldown(); return; }
+  const d = nodes[id]; if (!d) return;
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  highlightArrows(id);
+  document.getElementById('panelTitle').textContent = d.title;
+  let bh = d.badges.map(b => `<span class="badge" style="background:${b.color}">${b.text}</span>`).join('');
+  bh += `<br><span class="detail-tag" style="margin-top:4px;display:inline-block">${d.tech}</span>`;
+  document.getElementById('panelBadges').innerHTML = bh;
+  document.getElementById('panelBody').innerHTML = d.body;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function openArrowPanel(idx) {
+  const c = connections[idx];
+  const ft = nodes[c.from]?.title || c.from, tt = nodes[c.to]?.title || c.to;
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+  document.getElementById(c.from)?.classList.add('active');
+  document.getElementById(c.to)?.classList.add('active');
+  const svg = document.getElementById('arrowsSvg');
+  svg.querySelectorAll('path[data-idx]').forEach(p => { p.classList.remove('active'); p.setAttribute('stroke','#b0b8c4'); p.setAttribute('marker-end','url(#ah)'); });
+  const ap = svg.querySelector(`path[data-idx="${idx}"]`);
+  if (ap) { ap.classList.add('active'); ap.setAttribute('stroke','#3b82f6'); ap.setAttribute('marker-end','url(#ah-a)'); }
+  document.getElementById('panelTitle').textContent = `${ft} → ${tt}`;
+  document.getElementById('panelBadges').innerHTML = `<span class="badge" style="background:#dbeafe">${c.label}</span>`;
+  document.getElementById('panelBody').innerHTML = `<h3>Data Flow</h3><p>${c.detail}</p><h3>From</h3><p><strong>${ft}</strong> — click module to see full details</p><h3>To</h3><p><strong>${tt}</strong> — click module to see full details</p>`;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function highlightArrows(nodeId) {
+  document.getElementById('arrowsSvg').querySelectorAll('path[data-idx]').forEach(p => {
+    const c = connections[parseInt(p.getAttribute('data-idx'))];
+    if (c.from === nodeId || c.to === nodeId) {
+      p.setAttribute('stroke','#3b82f6'); p.setAttribute('stroke-width','2.2'); p.setAttribute('marker-end','url(#ah-a)');
+    } else {
+      p.setAttribute('stroke','#dde1e7'); p.setAttribute('stroke-width','0.8'); p.setAttribute('marker-end','url(#ah)');
+    }
+    p.classList.remove('active');
+  });
+}
+
+function resetArrows() {
+  document.getElementById('arrowsSvg').querySelectorAll('path[data-idx]').forEach(p => {
+    p.setAttribute('stroke','#b0b8c4'); p.setAttribute('stroke-width','1.2'); p.setAttribute('marker-end','url(#ah)'); p.classList.remove('active');
+  });
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('panelOverlay').classList.remove('open');
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+  resetArrows();
+  resetScanArrows();
+  resetDbArrows();
+}
+
+document.querySelectorAll('.node').forEach(n => {
+  n.addEventListener('click', (e) => { e.stopPropagation(); openPanel(n.id); });
+});
+document.getElementById('panelClose').addEventListener('click', closePanel);
+document.getElementById('panelOverlay').addEventListener('click', closePanel);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('panel').classList.contains('open')) { closePanel(); }
+    else if (document.getElementById('scanDrilldown').style.display === 'block') { closeScanDrilldown(); }
+    else if (document.getElementById('dbDrilldown').style.display === 'block') { closeDbDrilldown(); }
+  }
+});
+
+function init() { positionNodes(); drawArrows(); }
+setTimeout(init, 60);
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { init(); if (document.getElementById('scanDrilldown').style.display === 'block') { positionScanDdNodes(); drawScanArrows(); } if (document.getElementById('dbDrilldown').style.display === 'block') { positionDbDdNodes(); drawDbArrows(); } }, 100); });
+
+// ── SCAN ENGINE DRILL-DOWN ───────────────────────────
+
+const scanDdLayout = {
+  'se-redis':        { x: 0.06, y: 0.12 },
+  'se-orch':         { x: 0.30, y: 0.12 },
+  'se-delta':        { x: 0.56, y: 0.12 },
+  'se-nmap':         { x: 0.08, y: 0.42 },
+  'se-ssh':          { x: 0.22, y: 0.42 },
+  'se-winrm':        { x: 0.36, y: 0.42 },
+  'se-snmp':         { x: 0.50, y: 0.42 },
+  'se-aws':          { x: 0.68, y: 0.42 },
+  'se-azure':        { x: 0.79, y: 0.42 },
+  'se-gcp':          { x: 0.90, y: 0.42 },
+  'se-cis-linux':    { x: 0.15, y: 0.72 },
+  'se-cis-windows':  { x: 0.33, y: 0.72 },
+  'se-net-audit':    { x: 0.50, y: 0.72 },
+  'se-cloud-checks': { x: 0.79, y: 0.72 },
+  'se-graph':        { x: 0.33, y: 0.93 },
+};
+
+const scanDdNodes = {
+  'se-orch': {
+    title: 'Parallel Scan Orchestrator',
+    badges: [{text:'Core Component', color:'#dbeafe'}, {text:'asyncio', color:'#d1fae5'}],
+    tech: 'Python 3.12, asyncio, Redis consumer',
+    body: `<h3>Role</h3><p>Central brain of the Scan Engine. Dequeues scan jobs from Redis, selects the appropriate protocol driver based on asset type, manages concurrent scanning across multiple assets.</p>
+<h3>Concurrency Model</h3>
+<ul>
+<li><strong>Per-asset parallelism:</strong> 10 concurrent assets (configurable for 4-core box)</li>
+<li>Checks run <strong>sequentially per session</strong> — one SSH session per asset, checks execute in order</li>
+<li>Session pooling — reuses open connections across check batches</li>
+</ul>
+<h3>Job Flow</h3>
+<ol>
+<li>Dequeue from Redis <code>scan_jobs</code> queue</li>
+<li>Check Delta Engine — skip if fingerprint unchanged</li>
+<li>Select driver based on <code>asset_type</code></li>
+<li>Open session → execute checks → normalize → graph write</li>
+<li>Publish to Redis <code>findings:new</code> with Finding node IDs</li>
+</ol>`
+  },
+  'se-delta': {
+    title: 'Delta Scan Engine',
+    badges: [{text:'Optimization', color:'#fef3c7'}, {text:'~80% time savings', color:'#d1fae5'}],
+    tech: 'Fingerprint hashing, component-level diffing',
+    body: `<h3>Role</h3><p>After the first full scan, stores a state fingerprint per asset. Delta scans collect the fingerprint (~10 commands), diff against stored, and only re-run checks for changed components.</p>
+<h3>Fingerprint Components</h3>
+<table>
+<tr><th>Component</th><th>Command</th></tr>
+<tr><td>Installed packages</td><td><code>dpkg -l | md5sum</code> or <code>rpm -qa | md5sum</code></td></tr>
+<tr><td>Listening ports</td><td><code>ss -tlnp | md5sum</code></td></tr>
+<tr><td>Enabled services</td><td><code>systemctl list-unit-files --state=enabled | md5sum</code></td></tr>
+<tr><td>SSH config</td><td>Hash of <code>/etc/ssh/sshd_config</code></td></tr>
+<tr><td>PAM config</td><td>Hash of <code>/etc/pam.d/*</code></td></tr>
+<tr><td>Firewall rules</td><td><code>iptables -L -n | md5sum</code></td></tr>
+</table>
+<h3>Logic</h3>
+<p>If fingerprint matches → skip asset entirely. If delta detected in specific component (e.g., packages changed) → only re-run checks tagged with that component category. Result: ~80% reduction in scan time for stable environments.</p>`
+  },
+  'se-nmap': {
+    title: 'Nmap Wrapper',
+    badges: [{text:'Discovery', color:'#dbeafe'}, {text:'Unauthenticated', color:'#fee2e2'}],
+    tech: 'Nmap 7.94, NSE scripts, TCP SYN scan',
+    body: `<h3>Role</h3><p>Network reconnaissance and discovery. Runs as a <strong>separate discovery scan type</strong> (every 12h per schedule), not part of authenticated scan jobs. Builds asset inventory and network topology.</p>
+<h3>Capabilities</h3>
+<ul>
+<li><strong>TCP SYN scan:</strong> Fast port discovery without full TCP handshake</li>
+<li><strong>Service detection:</strong> Identifies services + versions on open ports</li>
+<li><strong>OS fingerprinting:</strong> Determines OS type and version</li>
+<li><strong>NSE scripts:</strong> Nmap Scripting Engine for additional enumeration</li>
+</ul>
+<h3>Graph Writes</h3>
+<ul>
+<li><code>Asset</code> nodes — hostname, IP, OS, open ports</li>
+<li><code>Software</code> nodes — detected services and versions</li>
+<li><code>Asset --CONNECTS_TO--&gt; Asset</code> — network topology edges</li>
+<li><code>Asset --RUNS--&gt; Software</code> — service relationships</li>
+</ul>`
+  },
+  'se-ssh': {
+    title: 'SSH Connector',
+    badges: [{text:'Authenticated', color:'#d1fae5'}, {text:'Linux / Unix', color:'#dbeafe'}],
+    tech: 'asyncssh, key-based or password auth',
+    body: `<h3>Role</h3><p>Opens persistent SSH sessions to Linux/Unix targets. Provides a <code>run_command(cmd) → stdout</code> interface that checks execute over. One session per asset, reused across all checks.</p>
+<h3>Authentication</h3>
+<ul>
+<li><strong>Key-based (preferred):</strong> SSH private key stored in credentials vault</li>
+<li><strong>Password:</strong> Fallback, stored encrypted</li>
+<li>Credentials referenced by <code>credentials_ref</code> in scan job</li>
+</ul>
+<h3>Session Management</h3>
+<ul>
+<li>Connection timeout: 10s, command timeout: 30s</li>
+<li>Session keepalive for long check sequences</li>
+<li>Automatic retry on transient failures (1 retry)</li>
+</ul>
+<h3>Used By</h3>
+<p>CIS v8.1 Linux Checks (~150), Network Device Config Audits (config pull via SSH for Cisco/Juniper/PaloAlto).</p>`
+  },
+  'se-winrm': {
+    title: 'WinRM Connector',
+    badges: [{text:'Authenticated', color:'#d1fae5'}, {text:'Windows', color:'#dbeafe'}],
+    tech: 'pywinrm, Kerberos/NTLM, PowerShell remoting',
+    body: `<h3>Role</h3><p>Opens PowerShell remoting sessions to Windows targets. Handles both domain-joined (Kerberos) and workgroup (NTLM) authentication.</p>
+<h3>Authentication</h3>
+<ul>
+<li><strong>Kerberos:</strong> Domain-joined machines, preferred</li>
+<li><strong>NTLM:</strong> Workgroup machines, fallback</li>
+<li>Requires WinRM service enabled on target (port 5985/5986)</li>
+</ul>
+<h3>Session Characteristics</h3>
+<ul>
+<li>PowerShell execution policy: bypass for scan session</li>
+<li>Runs as service account with local admin privileges</li>
+<li>Output parsed from PowerShell objects (JSON/CSV)</li>
+</ul>
+<h3>Used By</h3>
+<p>CIS v8.1 Windows Checks (~150) — registry values, GPO settings, service configs, audit policies.</p>`
+  },
+  'se-snmp': {
+    title: 'SNMP Poller',
+    badges: [{text:'Network Devices', color:'#dbeafe'}, {text:'v2c / v3', color:'#fef3c7'}],
+    tech: 'pysnmp, SNMP v2c (community string) / v3 (USM)',
+    body: `<h3>Role</h3><p>Polls network devices (switches, routers, firewalls, printers) via SNMP. Collects interface status, firmware versions, ARP tables, and configuration state via standard MIBs.</p>
+<h3>Protocol Support</h3>
+<ul>
+<li><strong>SNMPv2c:</strong> Community string authentication (legacy devices)</li>
+<li><strong>SNMPv3:</strong> USM (User-based Security Model) — auth + encryption</li>
+</ul>
+<h3>Collected Data</h3>
+<ul>
+<li>System info (sysDescr, sysName, sysUpTime)</li>
+<li>Interface table (ifTable) — status, speeds, errors</li>
+<li>ARP/MAC tables — network topology input</li>
+<li>Firmware/OS versions for CVE matching</li>
+</ul>
+<h3>Used With</h3>
+<p>Network Device Audits (~80 checks) — often paired with SSH for <code>show running-config</code> pull on Cisco/Juniper/PaloAlto.</p>`
+  },
+  'se-aws': {
+    title: 'AWS Connector',
+    badges: [{text:'Cloud API', color:'#fffbeb'}, {text:'boto3', color:'#fef3c7'}],
+    tech: 'boto3 (Python AWS SDK), IAM role / access keys',
+    body: `<h3>Role</h3><p>API-based scanning of AWS accounts. Calls AWS APIs to enumerate resources and check configurations. Session is an authenticated API client, not a network connection.</p>
+<h3>Authentication</h3>
+<ul>
+<li><strong>IAM Role (preferred):</strong> Cross-account assume-role for multi-account scanning</li>
+<li><strong>Access Keys:</strong> Fallback, stored encrypted in credentials vault</li>
+<li>Read-only policy required (SecurityAudit managed policy)</li>
+</ul>
+<h3>Services Scanned</h3>
+<ul>
+<li>EC2 (security groups, public IPs, EBS encryption)</li>
+<li>S3 (bucket policies, public access, encryption)</li>
+<li>IAM (password policy, MFA, unused keys)</li>
+<li>RDS, CloudTrail, VPC, Lambda, EKS</li>
+</ul>`
+  },
+  'se-azure': {
+    title: 'Azure Connector',
+    badges: [{text:'Cloud API', color:'#fffbeb'}, {text:'Azure SDK', color:'#dbeafe'}],
+    tech: 'Azure SDK for Python, Service Principal auth',
+    body: `<h3>Role</h3><p>API-based scanning of Azure subscriptions. Uses Azure SDK to enumerate and audit resource configurations.</p>
+<h3>Authentication</h3>
+<ul>
+<li><strong>Service Principal:</strong> App registration with Reader + Security Reader roles</li>
+<li>Multi-subscription support via management group scope</li>
+</ul>
+<h3>Services Scanned</h3>
+<ul>
+<li>VMs (NSGs, disk encryption, extensions)</li>
+<li>Storage Accounts (public access, encryption, HTTPS)</li>
+<li>Azure AD (MFA, conditional access, guest users)</li>
+<li>SQL Database, Key Vault, AKS, App Service</li>
+</ul>`
+  },
+  'se-gcp': {
+    title: 'GCP Connector',
+    badges: [{text:'Cloud API', color:'#fffbeb'}, {text:'GCP client lib', color:'#d1fae5'}],
+    tech: 'Google Cloud Client Libraries, Service Account auth',
+    body: `<h3>Role</h3><p>API-based scanning of GCP projects. Uses Google Cloud client libraries to enumerate and audit resource configurations.</p>
+<h3>Authentication</h3>
+<ul>
+<li><strong>Service Account:</strong> JSON key file with Viewer + Security Reviewer roles</li>
+<li>Organization-level scanning via folder hierarchy</li>
+</ul>
+<h3>Services Scanned</h3>
+<ul>
+<li>Compute Engine (firewall rules, disk encryption, serial ports)</li>
+<li>Cloud Storage (bucket IAM, public access, retention)</li>
+<li>IAM (service account keys, role bindings)</li>
+<li>GKE, Cloud SQL, BigQuery, Cloud Functions</li>
+</ul>`
+  },
+  'se-cis-linux': {
+    title: 'CIS v8.1 Linux Benchmark Checks',
+    badges: [{text:'~150 checks', color:'#d1fae5'}, {text:'CIS v8.1', color:'#dbeafe'}],
+    tech: 'Python check classes, execute over SSH sessions',
+    body: `<h3>Role</h3><p>~150 CIS v8.1 benchmark checks for Linux servers. Each check runs commands over the SSH session and parses output to determine pass/fail.</p>
+<h3>Check Categories</h3>
+<table>
+<tr><th>Category</th><th>Examples</th></tr>
+<tr><td>Filesystem</td><td>Partition config, mount options, sticky bits</td></tr>
+<tr><td>Services</td><td>Unnecessary services disabled, NTP configured</td></tr>
+<tr><td>Network</td><td>IP forwarding, ICMP redirects, TCP wrappers</td></tr>
+<tr><td>Logging</td><td>rsyslog/journald, log rotation, auditd rules</td></tr>
+<tr><td>Access</td><td>SSH config, PAM, password policy, sudo</td></tr>
+<tr><td>Permissions</td><td>File/dir permissions, SUID/SGID audit</td></tr>
+</table>
+<h3>Example</h3>
+<p><code>check_ssh_root_login</code>: Runs <code>grep PermitRootLogin /etc/ssh/sshd_config</code> → pass if "no". Creates Finding node + DETECTED_BY edge to Check node.</p>`
+  },
+  'se-cis-windows': {
+    title: 'CIS v8.1 Windows Benchmark Checks',
+    badges: [{text:'~150 checks', color:'#d1fae5'}, {text:'CIS v8.1', color:'#dbeafe'}],
+    tech: 'Python check classes, execute over WinRM (PowerShell)',
+    body: `<h3>Role</h3><p>~150 CIS v8.1 benchmark checks for Windows servers and workstations. Each check runs PowerShell commands over WinRM and evaluates the results.</p>
+<h3>Check Categories</h3>
+<table>
+<tr><th>Category</th><th>Examples</th></tr>
+<tr><td>Account Policies</td><td>Password length, lockout threshold, complexity</td></tr>
+<tr><td>Local Policies</td><td>Audit policy, user rights, security options</td></tr>
+<tr><td>Event Log</td><td>Log sizes, retention, audit categories enabled</td></tr>
+<tr><td>Windows Firewall</td><td>Profile settings, inbound/outbound rules</td></tr>
+<tr><td>Registry</td><td>Security-related registry values (LSA, NTLM)</td></tr>
+<tr><td>Services</td><td>Unnecessary services disabled, startup types</td></tr>
+</table>
+<h3>Example</h3>
+<p><code>check_password_length</code>: Runs <code>Get-ADDefaultDomainPasswordPolicy</code> → pass if MinPasswordLength >= 14.</p>`
+  },
+  'se-net-audit': {
+    title: 'Network Device Config Audits',
+    badges: [{text:'~80 checks', color:'#d1fae5'}, {text:'SNMP + SSH', color:'#dbeafe'}],
+    tech: 'Dual-protocol: SNMP for status + SSH for config pull',
+    body: `<h3>Role</h3><p>Audits network device configurations against security best practices. Uses SNMP for real-time status and SSH for full config extraction (<code>show running-config</code>).</p>
+<h3>Vendor Support</h3>
+<table>
+<tr><th>Vendor</th><th>Config Command</th></tr>
+<tr><td>Cisco IOS/IOS-XE</td><td><code>show running-config</code></td></tr>
+<tr><td>Juniper JunOS</td><td><code>show configuration | display set</code></td></tr>
+<tr><td>Palo Alto PAN-OS</td><td><code>show config running</code></td></tr>
+<tr><td>Fortinet FortiOS</td><td><code>show full-configuration</code></td></tr>
+</table>
+<h3>Check Categories</h3>
+<ul>
+<li>Management plane (SSH enabled, Telnet disabled, SNMP v3)</li>
+<li>Control plane (ACLs, routing authentication, NTP)</li>
+<li>Data plane (port security, VLAN config, spanning tree)</li>
+<li>Firmware version → CVE matching in graph</li>
+</ul>`
+  },
+  'se-cloud-checks': {
+    title: 'Cloud Configuration Checks',
+    badges: [{text:'~100 checks', color:'#d1fae5'}, {text:'AWS + Azure + GCP', color:'#fffbeb'}],
+    tech: 'API-based checks across all 3 cloud providers',
+    body: `<h3>Role</h3><p>~100 cloud configuration checks across AWS, Azure, and GCP. Each check calls the provider API and evaluates against security best practices.</p>
+<h3>Check Distribution</h3>
+<table>
+<tr><th>Provider</th><th>Checks</th><th>Focus Areas</th></tr>
+<tr><td>AWS</td><td>~40</td><td>S3, EC2, IAM, RDS, CloudTrail, VPC</td></tr>
+<tr><td>Azure</td><td>~35</td><td>VMs, Storage, AAD, SQL, Key Vault, NSGs</td></tr>
+<tr><td>GCP</td><td>~25</td><td>Compute, Storage, IAM, GKE, Cloud SQL</td></tr>
+</table>
+<h3>Examples</h3>
+<ul>
+<li><code>aws_s3_public_read</code>: Check bucket policy + ACL for public read access</li>
+<li><code>azure_storage_https</code>: Verify HTTPS-only transfer enabled</li>
+<li><code>gcp_compute_serial_port</code>: Ensure serial port access disabled</li>
+</ul>`
+  },
+  'se-redis': {
+    title: 'Redis Queue (External)',
+    badges: [{text:'External to Scan Engine', color:'#f3f4f6'}],
+    tech: 'Redis scan_jobs queue',
+    body: `<h3>Input</h3><p>The Scan Orchestrator dequeues jobs from the Redis <code>scan_jobs</code> queue. Each job contains: <code>{scan_id, asset_id, scan_type, credentials_ref}</code>.</p><h3>Output</h3><p>After processing, findings are published to the <code>findings:new</code> channel with Finding node IDs for the AI Brain to pick up.</p>`
+  },
+  'se-graph': {
+    title: 'Knowledge Graph (External)',
+    badges: [{text:'External to Scan Engine', color:'#f3f4f6'}],
+    tech: 'PostgreSQL 16 + Apache AGE',
+    body: `<h3>Graph Writes</h3><p>All scan results are written as graph nodes with edges:</p>
+<ul>
+<li><code>Asset</code>, <code>Software</code>, <code>Finding</code>, <code>ScanRun</code> nodes</li>
+<li><code>RUNS</code>, <code>HAS_FINDING</code>, <code>CONNECTS_TO</code>, <code>ASSOCIATED_CVE</code>, <code>DETECTED_BY</code>, <code>FOUND_IN</code>, <code>HAS_CVE</code> edges</li>
+</ul>
+<p>This is the single source of truth — the AI Brain reads these nodes for all its reasoning.</p>`
+  },
+};
+
+const scanDdConnections = [
+  { from: 'se-redis', to: 'se-orch', label: 'Dequeue scan jobs', detail: 'Orchestrator polls Redis scan_jobs queue. Each job: {scan_id, asset_id, scan_type, credentials_ref}.' },
+  { from: 'se-orch', to: 'se-delta', label: 'Fingerprint check', detail: 'Before scanning, checks Delta Engine for stored fingerprint. If unchanged → skip. If delta detected → identifies changed component categories and only runs relevant checks.' },
+  { from: 'se-orch', to: 'se-nmap', label: 'Discovery scans', detail: 'Dispatches network discovery scans (every 12h). Nmap runs unauthenticated — TCP SYN + service detection + OS fingerprinting.' },
+  { from: 'se-orch', to: 'se-ssh', label: 'Linux sessions', detail: 'Opens SSH session to Linux/Unix targets. Session reused across all checks for that asset. Key-based or password auth.' },
+  { from: 'se-orch', to: 'se-winrm', label: 'Windows sessions', detail: 'Opens WinRM/PowerShell session to Windows targets. Kerberos (domain) or NTLM (workgroup) authentication.' },
+  { from: 'se-orch', to: 'se-snmp', label: 'Device polling', detail: 'Opens SNMP session (v2c/v3) to network devices for status, firmware, and configuration polling.' },
+  { from: 'se-orch', to: 'se-aws', label: 'AWS API sessions', detail: 'Initializes boto3 session with IAM role assume-role or access keys. Read-only SecurityAudit policy.' },
+  { from: 'se-orch', to: 'se-azure', label: 'Azure API sessions', detail: 'Initializes Azure SDK session with Service Principal credentials. Reader + Security Reader roles.' },
+  { from: 'se-orch', to: 'se-gcp', label: 'GCP API sessions', detail: 'Initializes GCP client with Service Account JSON key. Viewer + Security Reviewer roles.' },
+  { from: 'se-ssh', to: 'se-cis-linux', label: 'Execute ~150 checks', detail: 'CIS Linux checks run commands over the SSH session and parse stdout. Sequential execution per asset. Each failed check → Finding node.' },
+  { from: 'se-winrm', to: 'se-cis-windows', label: 'Execute ~150 checks', detail: 'CIS Windows checks run PowerShell commands over WinRM. Evaluate registry, GPO, services, audit policies.' },
+  { from: 'se-snmp', to: 'se-net-audit', label: 'SNMP + config audit', detail: 'Network audits use SNMP for real-time status polling. Also paired with SSH for show running-config on Cisco/Juniper/PaloAlto.' },
+  { from: 'se-ssh', to: 'se-net-audit', label: 'Config pull (SSH)', detail: 'SSH used alongside SNMP for full config extraction from network devices — vendor-specific CLI (show running-config, etc.).' },
+  { from: 'se-aws', to: 'se-cloud-checks', label: 'AWS checks (~40)', detail: 'Cloud checks call boto3 APIs to evaluate AWS resource configurations. S3, EC2, IAM, RDS, CloudTrail, VPC.' },
+  { from: 'se-azure', to: 'se-cloud-checks', label: 'Azure checks (~35)', detail: 'Cloud checks call Azure SDK to evaluate resource configurations. VMs, Storage, AAD, SQL, Key Vault.' },
+  { from: 'se-gcp', to: 'se-cloud-checks', label: 'GCP checks (~25)', detail: 'Cloud checks call GCP client libraries to evaluate resource configurations. Compute, Storage, IAM, GKE.' },
+  { from: 'se-nmap', to: 'se-graph', label: 'Asset + topology nodes', detail: 'Nmap writes Asset nodes (hostname, IP, OS, ports), Software nodes (services), CONNECTS_TO edges (network topology), and RUNS edges.' },
+  { from: 'se-cis-linux', to: 'se-graph', label: 'Finding nodes', detail: 'Each failed check → Finding node + edges: HAS_FINDING to Asset, DETECTED_BY to Check, ASSOCIATED_CVE to CVE, FOUND_IN to ScanRun.' },
+  { from: 'se-cis-windows', to: 'se-graph', label: 'Finding nodes', detail: 'Each failed check → Finding node with full graph edges. Same pattern as Linux — Finding + edges to Asset, Check, CVE, ScanRun.' },
+  { from: 'se-net-audit', to: 'se-graph', label: 'Finding nodes', detail: 'Network audit findings written as graph nodes with edges to Asset, Check, and CVE nodes. Firmware versions linked to CVEs.' },
+  { from: 'se-cloud-checks', to: 'se-graph', label: 'Finding nodes', detail: 'Cloud check findings → graph nodes with edges to Asset (cloud resource as Asset node), Check, and CVE nodes.' },
+];
+
+function positionScanDdNodes() {
+  const c = document.getElementById('scanDdCanvas');
+  const W = c.clientWidth, H = c.clientHeight;
+  for (const [id, pos] of Object.entries(scanDdLayout)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.style.left = (pos.x * W - el.offsetWidth / 2) + 'px';
+    el.style.top = (pos.y * H - el.offsetHeight / 2) + 'px';
+  }
+  // Position zones
+  const pad = 16;
+  // Protocol Drivers zone
+  const zd = document.getElementById('zone-drivers');
+  const nmap = document.getElementById('se-nmap'), snmp = document.getElementById('se-snmp');
+  zd.style.left = (nmap.offsetLeft - pad) + 'px';
+  zd.style.top = (nmap.offsetTop - pad - 10) + 'px';
+  zd.style.width = (snmp.offsetLeft + snmp.offsetWidth - nmap.offsetLeft + pad * 2) + 'px';
+  zd.style.height = (nmap.offsetHeight + pad * 2 + 10) + 'px';
+  // Cloud Connectors zone
+  const zc = document.getElementById('zone-cloud');
+  const aws = document.getElementById('se-aws'), gcp = document.getElementById('se-gcp');
+  zc.style.left = (aws.offsetLeft - pad) + 'px';
+  zc.style.top = (aws.offsetTop - pad - 10) + 'px';
+  zc.style.width = (gcp.offsetLeft + gcp.offsetWidth - aws.offsetLeft + pad * 2) + 'px';
+  zc.style.height = (aws.offsetHeight + pad * 2 + 10) + 'px';
+  // Check Execution zone
+  const zk = document.getElementById('zone-checks');
+  const cisL = document.getElementById('se-cis-linux'), cloudC = document.getElementById('se-cloud-checks');
+  zk.style.left = (cisL.offsetLeft - pad) + 'px';
+  zk.style.top = (cisL.offsetTop - pad - 10) + 'px';
+  zk.style.width = (cloudC.offsetLeft + cloudC.offsetWidth - cisL.offsetLeft + pad * 2) + 'px';
+  zk.style.height = (cisL.offsetHeight + pad * 2 + 10) + 'px';
+}
+
+function getScanCenter(id) {
+  const el = document.getElementById(id);
+  if (!el) return {x:0,y:0};
+  return { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 };
+}
+
+function buildScanPath(from, to) {
+  const a = getScanCenter(from), b = getScanCenter(to);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist === 0) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const curve = Math.min(dist * 0.08, 20);
+  const nx = -dy / dist * curve, ny = dx / dist * curve;
+  return `M ${a.x} ${a.y} Q ${mx + nx} ${my + ny} ${b.x} ${b.y}`;
+}
+
+function drawScanArrows() {
+  const svg = document.getElementById('scanArrowsSvg');
+  svg.innerHTML = '<defs><marker id="sah" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#94a3b8"/></marker><marker id="sah-a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3b82f6"/></marker></defs>';
+  scanDdConnections.forEach((c, i) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', buildScanPath(c.from, c.to));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#b0b8c4');
+    path.setAttribute('stroke-width', '1.2');
+    path.setAttribute('marker-end', 'url(#sah)');
+    path.setAttribute('data-idx', i);
+    path.addEventListener('click', (e) => { e.stopPropagation(); openScanArrowPanel(i); });
+    path.addEventListener('mouseenter', (e) => {
+      const lbl = document.getElementById('scanArrowLabel');
+      const r = document.getElementById('scanDdCanvas').getBoundingClientRect();
+      lbl.textContent = c.label;
+      lbl.style.left = (e.clientX - r.left + 10) + 'px';
+      lbl.style.top = (e.clientY - r.top - 28) + 'px';
+      lbl.classList.add('visible');
+    });
+    path.addEventListener('mouseleave', () => { document.getElementById('scanArrowLabel').classList.remove('visible'); });
+    svg.appendChild(path);
+  });
+}
+
+function resetScanArrows() {
+  const svg = document.getElementById('scanArrowsSvg');
+  if (!svg) return;
+  svg.querySelectorAll('path[data-idx]').forEach(p => {
+    p.setAttribute('stroke', '#b0b8c4'); p.setAttribute('stroke-width', '1.2'); p.setAttribute('marker-end', 'url(#sah)'); p.classList.remove('active');
+  });
+}
+
+function highlightScanArrows(nodeId) {
+  document.getElementById('scanArrowsSvg').querySelectorAll('path[data-idx]').forEach(p => {
+    const c = scanDdConnections[parseInt(p.getAttribute('data-idx'))];
+    if (c.from === nodeId || c.to === nodeId) {
+      p.setAttribute('stroke', '#3b82f6'); p.setAttribute('stroke-width', '2.2'); p.setAttribute('marker-end', 'url(#sah-a)');
+    } else {
+      p.setAttribute('stroke', '#dde1e7'); p.setAttribute('stroke-width', '0.8'); p.setAttribute('marker-end', 'url(#sah)');
+    }
+    p.classList.remove('active');
+  });
+}
+
+function openScanPanel(id) {
+  const d = scanDdNodes[id]; if (!d) return;
+  document.querySelectorAll('#scanDdCanvas .node').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  highlightScanArrows(id);
+  document.getElementById('panelTitle').textContent = d.title;
+  let bh = d.badges.map(b => `<span class="badge" style="background:${b.color}">${b.text}</span>`).join('');
+  bh += `<br><span class="detail-tag" style="margin-top:4px;display:inline-block">${d.tech}</span>`;
+  document.getElementById('panelBadges').innerHTML = bh;
+  document.getElementById('panelBody').innerHTML = d.body;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function openScanArrowPanel(idx) {
+  const c = scanDdConnections[idx];
+  const ft = scanDdNodes[c.from]?.title || c.from, tt = scanDdNodes[c.to]?.title || c.to;
+  document.querySelectorAll('#scanDdCanvas .node').forEach(n => n.classList.remove('active'));
+  document.getElementById(c.from)?.classList.add('active');
+  document.getElementById(c.to)?.classList.add('active');
+  const svg = document.getElementById('scanArrowsSvg');
+  svg.querySelectorAll('path[data-idx]').forEach(p => { p.classList.remove('active'); p.setAttribute('stroke', '#b0b8c4'); p.setAttribute('marker-end', 'url(#sah)'); });
+  const ap = svg.querySelector(`path[data-idx="${idx}"]`);
+  if (ap) { ap.classList.add('active'); ap.setAttribute('stroke', '#3b82f6'); ap.setAttribute('marker-end', 'url(#sah-a)'); }
+  document.getElementById('panelTitle').textContent = `${ft} → ${tt}`;
+  document.getElementById('panelBadges').innerHTML = `<span class="badge" style="background:#dbeafe">${c.label}</span>`;
+  document.getElementById('panelBody').innerHTML = `<h3>Data Flow</h3><p>${c.detail}</p><h3>From</h3><p><strong>${ft}</strong> — click module for full details</p><h3>To</h3><p><strong>${tt}</strong> — click module for full details</p>`;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function openScanDrilldown() {
+  const dd = document.getElementById('scanDrilldown');
+  dd.style.display = 'block';
+  setTimeout(() => {
+    positionScanDdNodes();
+    drawScanArrows();
+  }, 50);
+  document.querySelectorAll('#scanDdCanvas .node').forEach(n => {
+    n.onclick = (e) => { e.stopPropagation(); openScanPanel(n.id); };
+  });
+}
+
+function closeScanDrilldown() {
+  closePanel();
+  document.getElementById('scanDrilldown').style.display = 'none';
+  document.querySelectorAll('#scanDdCanvas .node').forEach(n => n.classList.remove('active'));
+  resetScanArrows();
+}
+
+document.getElementById('scanDdBack').addEventListener('click', closeScanDrilldown);
+
+// ── DATABASE DRILL-DOWN ──────────────────────────────
+
+const dbDdLayout = {
+  // External consumers (left + right edges)
+  'db-scaneng':   { x: 0.05, y: 0.22 },
+  'db-apiserver': { x: 0.05, y: 0.55 },
+  'db-aibrain':   { x: 0.95, y: 0.22 },
+  'db-syncagent': { x: 0.95, y: 0.55 },
+  // Connection pool (top center)
+  'db-pool':      { x: 0.50, y: 0.10 },
+  // Storage engines (middle row)
+  'db-rel':       { x: 0.22, y: 0.40 },
+  'db-age':       { x: 0.42, y: 0.40 },
+  'db-pgvec':     { x: 0.62, y: 0.40 },
+  'db-ts':        { x: 0.82, y: 0.40 },
+  // Management (bottom row)
+  'db-alembic':   { x: 0.25, y: 0.75 },
+  'db-nvd':       { x: 0.50, y: 0.75 },
+  'db-index':     { x: 0.75, y: 0.75 },
+};
+
+const dbDdNodes = {
+  'db-pool': {
+    title: 'Connection Pool',
+    badges: [{text:'asyncpg', color:'#dbeafe'}, {text:'20-30 connections', color:'#d1fae5'}],
+    tech: 'asyncpg connection pool, per-consumer namespaces',
+    body: `<h3>Role</h3><p>Manages concurrent database access from multiple consumers hitting one PostgreSQL 16 instance. Each consumer gets its own pool namespace with appropriate sizing.</p>
+<h3>Pool Allocation (4-core / 16GB box)</h3>
+<table>
+<tr><th>Consumer</th><th>Pool Size</th><th>Pattern</th></tr>
+<tr><td>Scan Engine</td><td>8 connections</td><td>Write-heavy: bulk graph node/edge inserts</td></tr>
+<tr><td>AI Brain</td><td>6 connections</td><td>Mixed: read context (4-hop traversals), write scores/edges</td></tr>
+<tr><td>API Server</td><td>10 connections</td><td>Read-heavy: dashboard queries, both SQL + Cypher</td></tr>
+<tr><td>Sync Agent</td><td>4 connections</td><td>Batch: CVE delta upserts every 6h</td></tr>
+<tr><td>SIEM Collector</td><td>2 connections</td><td>Append-only: siem_logs + Alert nodes</td></tr>
+</table>
+<h3>Connection Routing</h3>
+<p>All queries go through the same asyncpg pool but are routed to different engines: plain SQL for relational tables, <code>ag_catalog</code> for Cypher, pgvector operators for similarity, TimescaleDB for time-series.</p>`
+  },
+  'db-rel': {
+    title: 'Relational Schema',
+    badges: [{text:'Plain SQL', color:'#ccfbf1'}, {text:'SQLAlchemy ORM', color:'#d1fae5'}],
+    tech: 'Standard PostgreSQL tables, SQLAlchemy models, Alembic-managed',
+    body: `<h3>Role</h3><p>Operational data that doesn't benefit from graph structure. Assets, findings, and CVEs live in the <strong>graph</strong> — these tables handle auth, scheduling, and audit.</p>
+<h3>Tables</h3>
+<table>
+<tr><th>Table</th><th>Purpose</th></tr>
+<tr><td><code>users</code></td><td>Auth, roles (Admin/Analyst/Viewer), tag scopes</td></tr>
+<tr><td><code>sessions</code></td><td>JWT session tracking, refresh tokens</td></tr>
+<tr><td><code>scan_schedules</code></td><td>Cron-like schedules for scan jobs</td></tr>
+<tr><td><code>scan_evidence</code></td><td>Raw check output (stdout, evidence blobs)</td></tr>
+<tr><td><code>alert_rules</code></td><td>SIEM threshold/absence/correlation rule definitions</td></tr>
+<tr><td><code>audit_log</code></td><td>Who did what, when — immutable append-only</td></tr>
+<tr><td><code>sync_state</code></td><td>Last sync timestamps, delta cursors</td></tr>
+</table>
+<h3>RBAC Enforcement</h3>
+<p>Every query filtered by user's tag scope. <code>WHERE asset_tags && user.allowed_tags</code> on relational, equivalent Cypher filter on graph queries.</p>`
+  },
+  'db-age': {
+    title: 'Apache AGE Graph Engine',
+    badges: [{text:'Core', color:'#ede9fe'}, {text:'Cypher', color:'#c4b5fd'}, {text:'13 node types', color:'#ddd6fe'}],
+    tech: 'Apache AGE extension, Cypher query language, property graph model',
+    body: `<h3>Role</h3><p>The heart of the Security Knowledge Graph. All security entities and their relationships as a property graph. Cypher for traversal queries — no 7-table JOINs.</p>
+<h3>Node Types (13)</h3>
+<table>
+<tr><th>Node</th><th>Created By</th><th>Key Properties</th></tr>
+<tr><td>Asset</td><td>Scan Engine</td><td>hostname, ip, os, criticality, internet_facing</td></tr>
+<tr><td>Software</td><td>Scan Engine</td><td>vendor, product, version, cpe_string</td></tr>
+<tr><td>Finding</td><td>Scan Engine + AI</td><td>severity, status, ai_risk_score, ai_remediation</td></tr>
+<tr><td>CVE</td><td>Sync Agent</td><td>cvss_score, epss_score, is_kev</td></tr>
+<tr><td>Patch</td><td>Sync Agent</td><td>description, url, release_date</td></tr>
+<tr><td>Control</td><td>Sync Agent</td><td>framework, title, category</td></tr>
+<tr><td>Framework</td><td>Seed data</td><td>name, version (CIS, NIST, ISO)</td></tr>
+<tr><td>Check</td><td>Check Library</td><td>title, severity, remediation_text</td></tr>
+<tr><td>Technique</td><td>Sync Agent</td><td>mitre_id, tactic, description</td></tr>
+<tr><td>Alert</td><td>SIEM</td><td>rule_id, severity, triggered_at</td></tr>
+<tr><td>ScanRun</td><td>Scan Engine</td><td>type, started_at, check counts</td></tr>
+<tr><td>AIAction</td><td>AI Brain</td><td>action_type, status, confidence</td></tr>
+<tr><td>DataClass, NetworkZone</td><td>Admin</td><td>name, sensitivity, segment</td></tr>
+</table>
+<h3>Edge Types (16)</h3>
+<p>RUNS, HAS_FINDING, CONNECTS_TO, EXPOSED_TO, STORES, DEPENDS_ON, ASSOCIATED_CVE, HAS_CVE, MITIGATED_BY, ENABLES, MAPS_TO, BELONGS_TO, DETECTED_BY, FOUND_IN, TRIGGERED, CORRELATED_WITH, RECOMMENDED_BY, LEADS_TO</p>
+<h3>Key Traversals</h3>
+<ul>
+<li><strong>Blast radius:</strong> <code>MATCH (a:Asset)-[:CONNECTS_TO*1..N]->(b) WHERE a.id = $id</code></li>
+<li><strong>Attack paths:</strong> Internet-facing → CVE → ENABLES technique → CONNECTS_TO → next CVE</li>
+<li><strong>Compliance gaps:</strong> Framework → Controls → which have open Finding MAPS_TO edges</li>
+</ul>
+<h3>Graph Size (25 assets, 3 months)</h3>
+<p>~253K nodes (CVEs dominate at ~250K), ~1.2M edges, ~8-12GB disk.</p>`
+  },
+  'db-pgvec': {
+    title: 'pgvector Embedding Store',
+    badges: [{text:'pgvector', color:'#f5d0fe'}, {text:'384-dim', color:'#fdf4ff'}, {text:'~15K chunks', color:'#fce7f3'}],
+    tech: 'pgvector extension, BGE-small-en-v1.5 embeddings, cosine similarity',
+    body: `<h3>Role</h3><p>Stores vector embeddings for the Compliance RAG system. CIS v8.1, ISO 27001, NIST CSF, SOC 2, HIPAA, PCI DSS — chunked into ~15K text chunks, each embedded as a 384-dim vector.</p>
+<h3>Table: compliance_chunks</h3>
+<table>
+<tr><th>Column</th><th>Type</th></tr>
+<tr><td>id</td><td>SERIAL PRIMARY KEY</td></tr>
+<tr><td>framework_id</td><td>INT → Framework graph node</td></tr>
+<tr><td>control_id</td><td>INT → Control graph node</td></tr>
+<tr><td>chunk_text</td><td>TEXT (200-500 tokens)</td></tr>
+<tr><td>embedding</td><td>VECTOR(384)</td></tr>
+<tr><td>section_ref</td><td>TEXT (e.g. "CIS 5.2.4")</td></tr>
+</table>
+<h3>Query Pattern</h3>
+<p><code>SELECT chunk_text, 1 - (embedding &lt;=&gt; $query_vec) AS similarity FROM compliance_chunks ORDER BY embedding &lt;=&gt; $query_vec LIMIT 5;</code></p>
+<h3>Graph Cross-Reference</h3>
+<p>Each chunk links to its source <code>Control</code> and <code>Framework</code> graph nodes via foreign keys. Seamless traversal: Finding → MAPS_TO → Control → compliance chunk text.</p>
+<h3>Consumers</h3>
+<ul>
+<li><strong>Compliance Mapper agent:</strong> Embeds finding description → top-K similar chunks → Claude prompt</li>
+<li><strong>Report Generator agent:</strong> Pulls framework language per control gap</li>
+</ul>`
+  },
+  'db-ts': {
+    title: 'TimescaleDB Hypertables',
+    badges: [{text:'TimescaleDB', color:'#ffedd5'}, {text:'Time-series', color:'#fed7aa'}],
+    tech: 'TimescaleDB extension, automatic chunk management, compression',
+    body: `<h3>Role</h3><p>Time-partitioned storage for high-volume, time-stamped data. <strong>Not for findings</strong> (those are graph nodes) — for raw operational logs and evidence that benefit from time-based partitioning.</p>
+<h3>Hypertables</h3>
+<table>
+<tr><th>Table</th><th>Volume</th><th>Partition</th></tr>
+<tr><td><code>siem_logs</code></td><td>~52K events/day</td><td>Weekly chunks</td></tr>
+<tr><td><code>scan_evidence</code></td><td>~2K rows/scan</td><td>Weekly chunks</td></tr>
+</table>
+<h3>Lifecycle Policy</h3>
+<ul>
+<li><strong>Hot (0-30 days):</strong> Uncompressed, full query speed</li>
+<li><strong>Warm (30-90 days):</strong> Compressed (~10x), still queryable</li>
+<li><strong>Cold (90+ days):</strong> Drop or archive to disk</li>
+</ul>
+<h3>Why TimescaleDB Over Plain Partitioning</h3>
+<ul>
+<li>Automatic chunk management (no manual <code>CREATE PARTITION</code>)</li>
+<li>Built-in compression with segment-by columns</li>
+<li>Continuous aggregates for dashboard rollups (hourly/daily event counts)</li>
+<li>Same PostgreSQL process — no separate time-series DB</li>
+</ul>`
+  },
+  'db-alembic': {
+    title: 'Alembic Migration System',
+    badges: [{text:'Alembic', color:'#e2e8f0'}, {text:'Schema versioning', color:'#f1f5f9'}],
+    tech: 'Alembic (Python), manages all 4 storage engines',
+    body: `<h3>Role</h3><p>Schema versioning for the entire PostgreSQL instance. Manages relational tables, graph DDL, extension setup, and hypertable creation — all in a single migration chain.</p>
+<h3>Migration Scope</h3>
+<table>
+<tr><th>Engine</th><th>Migration Commands</th></tr>
+<tr><td>Extensions</td><td><code>CREATE EXTENSION age, pgvector, timescaledb</code></td></tr>
+<tr><td>Relational</td><td>Standard <code>CREATE TABLE</code>, <code>ALTER TABLE</code></td></tr>
+<tr><td>Graph (AGE)</td><td><code>SELECT create_graph('security')</code>, <code>create_vlabel</code>, <code>create_elabel</code></td></tr>
+<tr><td>Vectors</td><td><code>CREATE TABLE compliance_chunks (... embedding VECTOR(384))</code></td></tr>
+<tr><td>TimescaleDB</td><td><code>SELECT create_hypertable('siem_logs', 'ingested_at')</code></td></tr>
+</table>
+<h3>Seed Data</h3>
+<p>Initial migrations seed Framework nodes (CIS v8.1, NIST CSF, ISO 27001), Control nodes (~800), and Check nodes (~520) from the Check Library definitions.</p>
+<h3>Versioning</h3>
+<p>Linear migration chain. Each appliance upgrade runs <code>alembic upgrade head</code> before starting containers. Rollback supported for relational changes.</p>`
+  },
+  'db-nvd': {
+    title: 'NVD Graph Ingestion',
+    badges: [{text:'Data Pipeline', color:'#e2e8f0'}, {text:'Daily ~200 CVEs', color:'#fef3c7'}],
+    tech: 'Python ingestion scripts, NVD 2.0 JSON format, bulk Cypher upserts',
+    body: `<h3>Role</h3><p>Parses NVD JSON feeds and writes CVE/Patch/Technique data as graph nodes and edges. Runs inside the Sync Agent but the scripts live with the database schema.</p>
+<h3>Ingestion Pipeline</h3>
+<ol>
+<li><strong>Parse:</strong> NVD 2.0 JSON → extract CVE ID, CVSS, CWE, CPE, references</li>
+<li><strong>Enrich:</strong> Merge EPSS scores, CISA KEV status, ATT&CK technique mapping</li>
+<li><strong>Upsert:</strong> Single transaction — CVE nodes, Patch nodes, Technique nodes</li>
+<li><strong>Link:</strong> HAS_CVE edges (Software → CVE), MITIGATED_BY (CVE → Patch), ENABLES (CVE → Technique)</li>
+<li><strong>Notify:</strong> Post-sync publishes to Redis → AI Brain re-evaluates open findings</li>
+</ol>
+<h3>Volumes</h3>
+<table>
+<tr><th>Operation</th><th>Size</th><th>Frequency</th></tr>
+<tr><td>Daily delta</td><td>~200 CVEs (2-15MB)</td><td>Every 6h</td></tr>
+<tr><td>Full bootstrap</td><td>~250K CVEs (~180MB)</td><td>New appliance only</td></tr>
+</table>
+<h3>CPE Matching</h3>
+<p>After CVE upsert, matches CPE strings against Software nodes in the graph to create HAS_CVE edges. This links vulnerabilities to actual software running on scanned assets.</p>`
+  },
+  'db-index': {
+    title: 'Index Strategy',
+    badges: [{text:'Performance', color:'#e2e8f0'}, {text:'4 index types', color:'#f1f5f9'}],
+    tech: 'B-tree, GiST (pgvector), graph label indexes, TimescaleDB auto-indexes',
+    body: `<h3>Role</h3><p>Index strategy across all 4 storage engines. Critical for query performance on a 4-core box with ~253K graph nodes and ~1.2M edges.</p>
+<h3>Index Types</h3>
+<table>
+<tr><th>Engine</th><th>Index Type</th><th>Purpose</th></tr>
+<tr><td>Relational</td><td>B-tree</td><td>Primary keys, foreign keys, common WHERE clauses</td></tr>
+<tr><td>AGE Graph</td><td>Graph label indexes</td><td>Fast node lookup by label (Asset, Finding, CVE)</td></tr>
+<tr><td>AGE Graph</td><td>Property indexes</td><td>Frequently filtered properties (status, severity, hostname)</td></tr>
+<tr><td>pgvector</td><td>IVFFlat / HNSW</td><td>Approximate nearest neighbor for 384-dim vectors</td></tr>
+<tr><td>TimescaleDB</td><td>Auto time-based</td><td>Automatic indexes on time partition column</td></tr>
+</table>
+<h3>Key Indexes</h3>
+<ul>
+<li><code>CREATE INDEX ON ag_catalog.Asset (hostname)</code> — asset lookup by hostname</li>
+<li><code>CREATE INDEX ON ag_catalog.Finding (status, severity)</code> — open findings filter</li>
+<li><code>CREATE INDEX ON compliance_chunks USING ivfflat (embedding vector_cosine_ops)</code></li>
+<li>Partial index: <code>WHERE status = 'open'</code> on Finding nodes — most queries filter by this</li>
+</ul>
+<h3>Hot Path Fit</h3>
+<p>Target: hot working set fits in 4GB <code>shared_buffers</code>. CVE nodes are cold (rarely traversed individually), Asset/Finding/Software nodes are hot.</p>`
+  },
+  'db-scaneng': {
+    title: 'Scan Engine (External)',
+    badges: [{text:'External consumer', color:'#f3f4f6'}],
+    tech: 'Writes Asset, Software, Finding, ScanRun graph nodes + edges',
+    body: `<h3>Write Pattern</h3><p>Write-heavy consumer. After each scan, bulk-inserts graph nodes and edges in a single transaction per asset.</p>
+<h3>Graph Writes</h3>
+<ul>
+<li><code>Asset</code>, <code>Software</code>, <code>Finding</code>, <code>ScanRun</code> nodes</li>
+<li><code>RUNS</code>, <code>HAS_FINDING</code>, <code>CONNECTS_TO</code>, <code>ASSOCIATED_CVE</code>, <code>DETECTED_BY</code>, <code>FOUND_IN</code>, <code>HAS_CVE</code> edges</li>
+</ul>
+<p>Also writes raw evidence to <code>scan_evidence</code> (TimescaleDB hypertable).</p>`
+  },
+  'db-aibrain': {
+    title: 'AI Brain (External)',
+    badges: [{text:'External consumer', color:'#f3f4f6'}],
+    tech: 'Reads graph context (4-hop traversals), writes intelligence back',
+    body: `<h3>Read Pattern</h3><p>Complex Cypher traversals: 4-hop from Finding → Asset → CVE → Technique → neighboring Assets. Blast radius, attack chain, compliance gap queries.</p>
+<h3>Write Pattern</h3><p>Enriches existing nodes: <code>ai_risk_score</code> on Finding. Creates new edges: <code>MAPS_TO</code> (compliance), <code>RECOMMENDED_BY</code> (remediation). Creates <code>AIAction</code> nodes.</p>
+<h3>Vector Queries</h3><p>Compliance Mapper agent queries pgvector: embed finding description → top-K compliance chunks → include in Claude prompt.</p>`
+  },
+  'db-apiserver': {
+    title: 'API Server (External)',
+    badges: [{text:'External consumer', color:'#f3f4f6'}],
+    tech: 'FastAPI + AGE driver, SQL + Cypher, RBAC-scoped queries',
+    body: `<h3>Read Pattern</h3><p>Read-heavy. Dashboard queries hit both SQL (users, schedules) and Cypher (asset topology, finding context, blast radius).</p>
+<h3>Graph-Powered Endpoints</h3>
+<ul>
+<li><code>GET /assets/:id/blast-radius</code> → CONNECTS_TO traversal N hops</li>
+<li><code>GET /findings/:id/context</code> → full graph context the AI Brain used</li>
+<li><code>GET /compliance/:framework/gaps</code> → Control gap analysis traversal</li>
+<li><code>GET /attack-paths</code> → matched attack chain patterns</li>
+</ul>`
+  },
+  'db-syncagent': {
+    title: 'Sync Agent (External)',
+    badges: [{text:'External consumer', color:'#f3f4f6'}],
+    tech: 'Go 1.22, batch Cypher upserts, mTLS',
+    body: `<h3>Write Pattern</h3><p>Batch writes every 6h. CVE delta → upsert CVE nodes, Patch nodes, Technique nodes, Control nodes. Creates HAS_CVE, MITIGATED_BY, ENABLES edges.</p>
+<p>Quarterly: compliance doc sync → new Control nodes + pgvector chunk embeddings.</p>
+<p>Post-sync notifies AI Brain via Redis to re-evaluate open findings against new CVE data.</p>`
+  },
+};
+
+const dbDdConnections = [
+  // External → Pool
+  { from: 'db-scaneng', to: 'db-pool', label: 'Graph writes (asyncpg)', detail: 'Scan Engine bulk-inserts Asset, Software, Finding, ScanRun nodes and their edges after each scan. Also writes raw evidence to scan_evidence hypertable. Uses 8 connections from the pool.' },
+  { from: 'db-aibrain', to: 'db-pool', label: 'Read context + write intelligence', detail: 'AI Brain reads 4-hop graph context (Cypher traversals) before reasoning with Claude, then writes back: ai_risk_score, MAPS_TO edges, AIAction nodes, RECOMMENDED_BY edges. Also queries pgvector for compliance RAG. Uses 6 connections.' },
+  { from: 'db-apiserver', to: 'db-pool', label: 'SQL + Cypher queries', detail: 'API Server runs both SQL (users, schedules via SQLAlchemy) and Cypher (blast-radius, attack-paths, compliance gaps via AGE driver). All queries RBAC-scoped. Uses 10 connections.' },
+  { from: 'db-syncagent', to: 'db-pool', label: 'CVE delta upserts', detail: 'Every 6h: batch Cypher upserts for CVE, Patch, Technique, Control nodes. Creates HAS_CVE, MITIGATED_BY, ENABLES edges. Quarterly: compliance chunk embeddings to pgvector. Uses 4 connections.' },
+  // Pool → Engines
+  { from: 'db-pool', to: 'db-rel', label: 'SQL queries', detail: 'Standard SQL via SQLAlchemy ORM. Tables: users, sessions, scan_schedules, alert_rules, audit_log, sync_state. RBAC tag scopes filter every query.' },
+  { from: 'db-pool', to: 'db-age', label: 'Cypher traversals', detail: 'Graph queries via ag_catalog: node lookups, multi-hop traversals (blast radius, attack paths), edge creation (MAPS_TO, RECOMMENDED_BY). The primary query interface for security intelligence.' },
+  { from: 'db-pool', to: 'db-pgvec', label: 'Vector similarity', detail: 'Cosine similarity search on compliance_chunks. Used by Compliance Mapper (find matching controls) and Report Generator (pull framework language). ~5ms per top-K query.' },
+  { from: 'db-pool', to: 'db-ts', label: 'Time-series queries', detail: 'TimescaleDB queries for siem_logs (alert correlation, log search) and scan_evidence (raw check output retrieval). Continuous aggregates for dashboard rollup charts.' },
+  // NVD → AGE
+  { from: 'db-nvd', to: 'db-age', label: 'CVE/Patch/Technique upserts', detail: 'NVD ingestion pipeline parses JSON feeds → upserts CVE nodes (CVSS, EPSS, KEV), Patch nodes, Technique nodes (ATT&CK). Creates HAS_CVE, MITIGATED_BY, ENABLES edges. CPE matching links CVEs to existing Software nodes.' },
+  // Alembic → Engines
+  { from: 'db-alembic', to: 'db-rel', label: 'Table DDL', detail: 'Alembic manages CREATE TABLE, ALTER TABLE for all relational tables. Standard migration workflow: generate → review → apply.' },
+  { from: 'db-alembic', to: 'db-age', label: 'Graph DDL + extensions', detail: 'Manages CREATE EXTENSION age, create_graph(), create_vlabel/create_elabel for all 13 node types and 16 edge types. Also seeds Framework, Control, and Check nodes.' },
+  // Index → Engines
+  { from: 'db-index', to: 'db-age', label: 'Graph indexes', detail: 'Label indexes for fast node lookup (Asset by hostname, Finding by status+severity). Property indexes on frequently filtered fields. Partial indexes (WHERE status = \'open\') for hot-path queries.' },
+  { from: 'db-index', to: 'db-pgvec', label: 'IVFFlat / HNSW', detail: 'Approximate nearest neighbor indexes on the embedding column. IVFFlat for cost-efficient ANN, HNSW for faster recall. Tuned for 384-dim BGE-small vectors, ~15K chunks.' },
+  // Cross-reference
+  { from: 'db-age', to: 'db-pgvec', label: 'Control → chunks', detail: 'Graph Control nodes link to pgvector compliance_chunks via foreign key. Enables seamless traversal: Finding → MAPS_TO → Control → compliance chunk text. The graph provides structure, pgvector provides semantic search.' },
+];
+
+function positionDbDdNodes() {
+  const c = document.getElementById('dbDdCanvas');
+  const W = c.clientWidth, H = c.clientHeight;
+  for (const [id, pos] of Object.entries(dbDdLayout)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.style.left = (pos.x * W - el.offsetWidth / 2) + 'px';
+    el.style.top = (pos.y * H - el.offsetHeight / 2) + 'px';
+  }
+  const pad = 16;
+  // Storage Engines zone
+  const zs = document.getElementById('zone-storage');
+  const rel = document.getElementById('db-rel'), ts = document.getElementById('db-ts');
+  zs.style.left = (rel.offsetLeft - pad) + 'px';
+  zs.style.top = (rel.offsetTop - pad - 10) + 'px';
+  zs.style.width = (ts.offsetLeft + ts.offsetWidth - rel.offsetLeft + pad * 2) + 'px';
+  zs.style.height = (rel.offsetHeight + pad * 2 + 10) + 'px';
+  // Management zone
+  const zm = document.getElementById('zone-mgmt');
+  const alm = document.getElementById('db-alembic'), idx = document.getElementById('db-index');
+  zm.style.left = (alm.offsetLeft - pad) + 'px';
+  zm.style.top = (alm.offsetTop - pad - 10) + 'px';
+  zm.style.width = (idx.offsetLeft + idx.offsetWidth - alm.offsetLeft + pad * 2) + 'px';
+  zm.style.height = (alm.offsetHeight + pad * 2 + 10) + 'px';
+}
+
+function getDbCenter(id) {
+  const el = document.getElementById(id);
+  if (!el) return {x:0,y:0};
+  return { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 };
+}
+
+function buildDbPath(from, to) {
+  const a = getDbCenter(from), b = getDbCenter(to);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist === 0) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const curve = Math.min(dist * 0.08, 20);
+  const nx = -dy / dist * curve, ny = dx / dist * curve;
+  return `M ${a.x} ${a.y} Q ${mx + nx} ${my + ny} ${b.x} ${b.y}`;
+}
+
+function drawDbArrows() {
+  const svg = document.getElementById('dbArrowsSvg');
+  svg.innerHTML = '<defs><marker id="dah" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#94a3b8"/></marker><marker id="dah-a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3b82f6"/></marker></defs>';
+  dbDdConnections.forEach((c, i) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', buildDbPath(c.from, c.to));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#b0b8c4');
+    path.setAttribute('stroke-width', '1.2');
+    path.setAttribute('marker-end', 'url(#dah)');
+    path.setAttribute('data-idx', i);
+    path.addEventListener('click', (e) => { e.stopPropagation(); openDbArrowPanel(i); });
+    path.addEventListener('mouseenter', (e) => {
+      const lbl = document.getElementById('dbArrowLabel');
+      const r = document.getElementById('dbDdCanvas').getBoundingClientRect();
+      lbl.textContent = c.label;
+      lbl.style.left = (e.clientX - r.left + 10) + 'px';
+      lbl.style.top = (e.clientY - r.top - 28) + 'px';
+      lbl.classList.add('visible');
+    });
+    path.addEventListener('mouseleave', () => { document.getElementById('dbArrowLabel').classList.remove('visible'); });
+    svg.appendChild(path);
+  });
+}
+
+function resetDbArrows() {
+  const svg = document.getElementById('dbArrowsSvg');
+  if (!svg) return;
+  svg.querySelectorAll('path[data-idx]').forEach(p => {
+    p.setAttribute('stroke', '#b0b8c4'); p.setAttribute('stroke-width', '1.2'); p.setAttribute('marker-end', 'url(#dah)'); p.classList.remove('active');
+  });
+}
+
+function highlightDbArrows(nodeId) {
+  document.getElementById('dbArrowsSvg').querySelectorAll('path[data-idx]').forEach(p => {
+    const c = dbDdConnections[parseInt(p.getAttribute('data-idx'))];
+    if (c.from === nodeId || c.to === nodeId) {
+      p.setAttribute('stroke', '#3b82f6'); p.setAttribute('stroke-width', '2.2'); p.setAttribute('marker-end', 'url(#dah-a)');
+    } else {
+      p.setAttribute('stroke', '#dde1e7'); p.setAttribute('stroke-width', '0.8'); p.setAttribute('marker-end', 'url(#dah)');
+    }
+    p.classList.remove('active');
+  });
+}
+
+function openDbPanel(id) {
+  const d = dbDdNodes[id]; if (!d) return;
+  document.querySelectorAll('#dbDdCanvas .node').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  highlightDbArrows(id);
+  document.getElementById('panelTitle').textContent = d.title;
+  let bh = d.badges.map(b => `<span class="badge" style="background:${b.color}">${b.text}</span>`).join('');
+  bh += `<br><span class="detail-tag" style="margin-top:4px;display:inline-block">${d.tech}</span>`;
+  document.getElementById('panelBadges').innerHTML = bh;
+  document.getElementById('panelBody').innerHTML = d.body;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function openDbArrowPanel(idx) {
+  const c = dbDdConnections[idx];
+  const ft = dbDdNodes[c.from]?.title || c.from, tt = dbDdNodes[c.to]?.title || c.to;
+  document.querySelectorAll('#dbDdCanvas .node').forEach(n => n.classList.remove('active'));
+  document.getElementById(c.from)?.classList.add('active');
+  document.getElementById(c.to)?.classList.add('active');
+  const svg = document.getElementById('dbArrowsSvg');
+  svg.querySelectorAll('path[data-idx]').forEach(p => { p.classList.remove('active'); p.setAttribute('stroke', '#b0b8c4'); p.setAttribute('marker-end', 'url(#dah)'); });
+  const ap = svg.querySelector(`path[data-idx="${idx}"]`);
+  if (ap) { ap.classList.add('active'); ap.setAttribute('stroke', '#3b82f6'); ap.setAttribute('marker-end', 'url(#dah-a)'); }
+  document.getElementById('panelTitle').textContent = `${ft} → ${tt}`;
+  document.getElementById('panelBadges').innerHTML = `<span class="badge" style="background:#dbeafe">${c.label}</span>`;
+  document.getElementById('panelBody').innerHTML = `<h3>Data Flow</h3><p>${c.detail}</p><h3>From</h3><p><strong>${ft}</strong> — click module for full details</p><h3>To</h3><p><strong>${tt}</strong> — click module for full details</p>`;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function openDbDrilldown() {
+  const dd = document.getElementById('dbDrilldown');
+  dd.style.display = 'block';
+  setTimeout(() => {
+    positionDbDdNodes();
+    drawDbArrows();
+  }, 50);
+  document.querySelectorAll('#dbDdCanvas .node').forEach(n => {
+    n.onclick = (e) => { e.stopPropagation(); openDbPanel(n.id); };
+  });
+}
+
+function closeDbDrilldown() {
+  closePanel();
+  document.getElementById('dbDrilldown').style.display = 'none';
+  document.querySelectorAll('#dbDdCanvas .node').forEach(n => n.classList.remove('active'));
+  resetDbArrows();
+}
+
+document.getElementById('dbDdBack').addEventListener('click', closeDbDrilldown);
+</script>
+</body>
+</html>

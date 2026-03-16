@@ -46,3 +46,8 @@ prisma/*.db
 prisma/*.db-journal
 
 .vercel
+
+# Claude Code — local-only files (do not commit)
+.claude/worktrees/
+.claude/settings.local.json
+.claude/launch.json

@@ -4,6 +4,134 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [1.2.0] — 2026-03-16 — Developer Infrastructure Pass 2: Complete AI Dev Stack + PII Redaction Skill + AWS Roadmap
+
+### Added
+
+**14 Additional Skills from everything-claude-code + 2 BYOC-custom:**
+`backend-patterns`, `deployment-patterns`, `docker-patterns`, `database-migrations`, `e2e-testing`, `frontend-patterns`, `tdd-workflow`, `verification-loop`, `security-scan`, `enterprise-agent-ops`, `agentic-engineering`, `coding-standards`, `clickhouse-io`, `continuous-learning-v2`, **`pii-redaction`** (custom), **`aws-deployment`** (custom)
+
+**4 Additional Agents:** `tdd-guide`, `refactor-cleaner`, `doc-updater`, `loop-operator`
+
+**9 Additional Commands:** `/tdd`, `/plan`, `/code-review`, `/quality-gate`, `/update-docs`, `/test-coverage`, `/refactor-clean`, `/checkpoint`, `/learn`
+
+**12 Additional Rules:** `common/testing`, `common/coding-style`, `common/git-workflow`, `common/patterns`, `common/performance`, `common/development-workflow`, `common/agents`, `typescript/testing`, `typescript/patterns`, `typescript/coding-style`, `typescript/security`, `typescript/hooks`
+
+**New Documents:**
+- `docs/MASTER-ROADMAP.md` — Phases 13–22 with full feature specs, test plans, and priority queue
+- Updated `CLAUDE.md` — Complete Phase Lifecycle workflow, all commands and skills documented
+
+**PII/PHI Redaction Skill** (`.claude/skills/pii-redaction/SKILL.md`):
+- Covers all 18 HIPAA identifiers, GDPR personal data categories, PCI-DSS cardholder data
+- `redactForAuditLog()` — strip PII before storing in audit logs
+- `sanitizeForResponse()` — exclude sensitive fields (passwordHash, mfaSecret) from API responses
+- GDPR Art. 20 data export + Art. 17 erasure patterns
+- Compliance mapping: GDPR, HIPAA, PCI-DSS, CCPA
+
+**AWS Deployment Skill** (`.claude/skills/aws-deployment/SKILL.md`):
+- ECS Fargate architecture (replacing Vercel Hobby)
+- Production Dockerfile with multi-stage build + non-root user
+- GitHub Actions CI/CD pipeline (test → security-scan → build → deploy → migrate)
+- RDS PostgreSQL Multi-AZ + ElastiCache Redis + WAF + CloudFront
+- AWS Secrets Manager replacing `.env.local`
+- Migration plan: Vercel → AWS with zero-downtime cutover
+
+### Development Workflow Codified
+Complete phase lifecycle: `/new-phase → /tdd → implement → /code-review → /security-audit → /e2e → /quality-gate → /update-docs → PR`
+
+---
+
+## [1.1.0] — 2026-03-16 — Developer Infrastructure: everything-claude-code Integration
+
+### Feature: AI-Powered Development Infrastructure
+
+**What:** Integrated the `everything-claude-code` (ECC) open-source plugin ecosystem into BYOC's `.claude/` configuration directory to dramatically accelerate future development, enforce security standards, and provide structured agent-driven workflows.
+
+**Why:** BYOC is a production cybersecurity platform with complex, security-critical code. As the product scales, maintaining consistent security standards (tenant isolation, RBAC, audit logging) across 108+ API routes becomes increasingly error-prone without automation. ECC provides battle-tested tooling for exactly this.
+
+**Value Added:**
+- Claude Code now understands BYOC's full architecture on every session start (CLAUDE.md)
+- Security violations (missing tenantId, missing audit log, missing RBAC) are caught by automated rules before merge
+- Specialized agents reduce the mental overhead of security reviews, DB optimization, and test writing
+- Workflow commands (`/orchestrate`, `/new-phase`) standardize how new phases are built
+- Persistent memory means no context re-explanation at the start of each session
+
+### Added
+
+#### `CLAUDE.md` — Comprehensive Project Guide
+**File:** `CLAUDE.md` (root)
+**Reason:** Claude Code reads this file at session start. Without it, every session required re-explaining BYOC's architecture (tenantId everywhere, RBAC pattern, audit log requirement, 108 API routes, etc.). Now this context is always available.
+**Value:** Zero context-loss across sessions. Claude immediately knows: stack, file structure, auth pattern, RBAC capabilities, DB rules, scanner architecture, SIEM design, deployment setup.
+
+#### `.claude/agents/` — 7 Specialized Sub-Agents
+**Source:** everything-claude-code open-source repo
+**Reason:** Complex security tasks need domain expertise. A generic Claude session won't proactively check for tenant isolation violations or N+1 Prisma queries. Specialized agents are focused and thorough.
+
+| Agent | File | Purpose | When to Use |
+|-------|------|---------|-------------|
+| `security-reviewer` | `.claude/agents/security-reviewer.md` | OWASP Top 10, secrets, injection, auth bypass detection | After writing any API route, auth code, or RBAC change |
+| `architect` | `.claude/agents/architect.md` | System design, scalability, ADRs, trade-off analysis | When designing new phases or major refactors |
+| `database-reviewer` | `.claude/agents/database-reviewer.md` | PostgreSQL optimization, N+1 detection, tenant isolation audit | After writing Prisma queries or schema changes |
+| `e2e-runner` | `.claude/agents/e2e-runner.md` | Playwright E2E test generation and execution | For every new feature to maintain 258+ test suite |
+| `build-error-resolver` | `.claude/agents/build-error-resolver.md` | TypeScript and Next.js build error fixes | When `npm run build` or `npx tsc --noEmit` fails |
+| `code-reviewer` | `.claude/agents/code-reviewer.md` | Code quality, React patterns, backend anti-patterns | After writing any new code |
+| `planner` | `.claude/agents/planner.md` | Feature implementation planning with phases | Before starting a new feature or phase |
+
+#### `.claude/rules/` — 3 Mandatory Rule Files
+**Reason:** Rules are loaded by Claude Code automatically and enforced on every session. They encode BYOC's security requirements as hard constraints rather than suggestions.
+
+| File | Coverage | Value |
+|------|---------|-------|
+| `security.md` | Pre-commit checklist, tenant isolation, API route template, audit log requirement, secrets management | Prevents the most common security mistakes in BYOC |
+| `typescript.md` | TS typing, immutability, Next.js patterns, import order, naming conventions, file size limits | Consistent, maintainable code across 100+ files |
+| `database.md` | Tenant isolation enforcement, pagination requirements, transaction patterns, N+1 prevention, sensitive field exclusion | Catches DB security issues before they reach production |
+
+#### `.claude/commands/` — 5 Slash Commands
+**Reason:** Repeatable workflows for the most common BYOC development tasks. Instead of manually chaining agents, one command triggers the full workflow.
+
+| Command | File | Workflow | Value |
+|---------|------|---------|-------|
+| `/orchestrate` | `orchestrate.md` | Chains planner → tdd-guide → code-reviewer → security-reviewer | Standardized feature implementation with no shortcuts |
+| `/e2e` | `e2e.md` | Generates + runs Playwright tests for BYOC flows | Maintains 258+ E2E test suite without manual test writing |
+| `/build-fix` | `build-fix.md` | Fixes TS/build errors with minimal diffs | Quick, safe build recovery |
+| `/security-audit` | `security-audit.md` | Full BYOC security checklist: RBAC, tenant isolation, audit log coverage | Pre-release or pre-client-demo security gate |
+| `/new-phase` | `new-phase.md` | Creates phase doc + kicks off planner + architect | Standardized phase kickoff with documentation from day one |
+
+#### `.claude/skills/` — 3 Domain Knowledge Skills
+**Source:** everything-claude-code
+**Reason:** Skills provide deep domain knowledge that agents reference when needed.
+
+| Skill | Value |
+|-------|-------|
+| `security-review` | OWASP Top 10 patterns, secrets checklist, file upload validation, CSP configuration |
+| `api-design` | REST conventions, pagination, error formats, rate limiting patterns |
+| `postgres-patterns` | Index patterns, RLS, cursor pagination, covering indexes, UPSERT patterns |
+
+#### `.claude/contexts/` — 3 Execution Contexts
+| Context | Mode | When to Use |
+|---------|------|------------|
+| `dev.md` | Implementation | Building features, fixing bugs |
+| `review.md` | Audit | Code review, security audits |
+| `research.md` | Exploration | Understanding codebase, planning features |
+
+#### `.claude/mcp-servers.json` — MCP Server Configuration
+**Tools configured:** GitHub (PR/issue management), Railway (PostgreSQL management), Vercel (deployment management), Playwright (browser automation)
+**Reason:** Claude Code can directly inspect Railway DB, manage Vercel deployments, create GitHub PRs, and run browser tests — all without leaving the conversation.
+
+#### `memory/MEMORY.md` — Persistent Session Memory
+**File:** `~/.claude/projects/.../memory/MEMORY.md`
+**Reason:** Persists key project facts across sessions — phase history, non-negotiable rules, file paths, DB conventions, deployment info. Claude doesn't need to re-discover these facts every session.
+**Value:** ~10 minutes saved per session on context-setting; zero risk of forgetting the tenantId rule.
+
+### Installation Notes
+
+All files were sourced from `https://github.com/affaan-m/everything-claude-code` (MIT license).
+Only security, TypeScript, database, and architecture-relevant components were installed — media, social, and other irrelevant skills were skipped to keep the configuration lean.
+
+No new npm dependencies were added. All `.claude/` files are configuration only.
+
+---
+
 ## [1.0.1] — 2026-03-08 — Post-Phase 7: Dashboard Performance + Notification Bell
 
 ### Fixed

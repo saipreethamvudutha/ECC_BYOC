@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/mcp-servers.json",
+  "description": "MCP server configurations for BYOC development. Copy relevant sections to ~/.claude/claude_desktop_config.json or Claude Code settings.",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_PAT_HERE"
+      },
+      "description": "GitHub operations — PRs, issues, branches, repos. Useful for creating PRs, checking CI status.",
+      "setup": "Get PAT from https://github.com/settings/tokens with repo + PR scopes"
+    },
+    "railway": {
+      "command": "npx",
+      "args": ["-y", "@railway/mcp-server"],
+      "description": "Railway PostgreSQL database management — view services, check deployment status, view logs.",
+      "setup": "Run: railway login. Requires Railway CLI installed: npm install -g @railway/cli"
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com",
+      "description": "Vercel deployment management — view deployments, check build logs, manage env vars for byoc-rosy.vercel.app.",
+      "setup": "Authenticate via Vercel dashboard"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp", "--browser", "chrome"],
+      "description": "Browser automation for E2E testing and manual test verification.",
+      "setup": "Requires Playwright installed: npx playwright install"
+    }
+  },
+  "notes": [
+    "BYOC uses Railway for PostgreSQL (not Supabase), so use the railway MCP instead of supabase",
+    "Primary deployment is Vercel — byoc-rosy.vercel.app",
+    "GitHub repo should be connected for CI/CD",
+    "Playwright MCP is useful for visually verifying UI changes"
+  ]
+}

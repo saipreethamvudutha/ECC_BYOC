@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Furix AI — Graph Traversal Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fff; color: #1a1a2e; overflow: hidden; height: 100vh; }
+
+  .topbar { height: 44px; background: #f8f9fb; border-bottom: 1px solid #e2e6ed; display: flex; align-items: center; padding: 0 20px; gap: 16px; }
+  .topbar h1 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .topbar a { font-size: 11px; color: #6b7280; text-decoration: none; }
+  .topbar a:hover { color: #3b82f6; }
+
+  .main { display: flex; height: calc(100vh - 44px); }
+
+  .sidebar { width: 270px; min-width: 270px; border-right: 1px solid #e5e7eb; overflow-y: auto; background: #fafbfc; }
+  .sidebar-title { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; padding: 14px 16px 8px; }
+  .scenario-btn { display: block; width: 100%; text-align: left; padding: 10px 16px; border: none; background: none; cursor: pointer; border-bottom: 1px solid #f0f1f3; transition: background 0.15s; }
+  .scenario-btn:hover { background: #f0f4ff; }
+  .scenario-btn.active { background: #eff6ff; border-left: 3px solid #3b82f6; }
+  .scenario-btn .sc-agent { font-size: 9px; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+  .scenario-btn .sc-title { font-size: 11px; font-weight: 600; color: #1a1a2e; margin-bottom: 2px; }
+  .scenario-btn .sc-desc { font-size: 9px; color: #6b7280; line-height: 1.4; }
+
+  .graph-area { flex: 1; position: relative; overflow: hidden; background: #fdfdfe; }
+  .graph-canvas { width: 100%; height: 100%; }
+  .graph-hint { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 13px; color: #d1d5db; pointer-events: none; text-align: center; line-height: 1.6; }
+  .graph-hint.hidden { display: none; }
+  .graph-stats { position: absolute; bottom: 10px; left: 12px; font-size: 9px; color: #b0b8c4; }
+
+  .narrative { width: 300px; min-width: 300px; border-left: 1px solid #e5e7eb; display: flex; flex-direction: column; }
+  .narr-header { padding: 12px 16px 10px; border-bottom: 1px solid #e5e7eb; }
+  .narr-header h2 { font-size: 13px; font-weight: 700; line-height: 1.3; }
+  .narr-header .narr-agent { font-size: 10px; color: #7c3aed; font-weight: 600; margin-bottom: 2px; }
+  .narr-steps { flex: 1; overflow-y: auto; padding: 10px 14px; }
+  .narr-step { padding: 8px 10px; margin-bottom: 6px; border-radius: 7px; border: 1px solid #e5e7eb; background: #fafbfc; opacity: 0.25; transition: opacity 0.4s, background 0.4s, border-color 0.4s; }
+  .narr-step.active { opacity: 1; background: #eff6ff; border-color: #93c5fd; }
+  .narr-step.done { opacity: 0.65; background: #f0fdf4; border-color: #86efac; }
+  .narr-step .step-num { font-size: 8px; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+  .narr-step.done .step-num { color: #16a34a; }
+  .narr-step .step-label { font-size: 10px; font-weight: 600; color: #1a1a2e; margin-bottom: 1px; }
+  .narr-step .step-detail { font-size: 9px; color: #4b5563; line-height: 1.4; }
+  .narr-step .step-insight { font-size: 9px; color: #7c3aed; font-weight: 600; margin-top: 3px; }
+
+  .controls { padding: 10px 14px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; align-items: center; }
+  .ctrl-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 10px; font-weight: 600; transition: all 0.15s; }
+  .ctrl-btn:hover { background: #f3f4f6; }
+  .ctrl-btn.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  .ctrl-btn.primary:hover { background: #2563eb; }
+  .ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .speed-label { font-size: 9px; color: #9ca3af; margin-left: auto; }
+
+  .result-card { margin: 6px 14px 10px; padding: 10px; border-radius: 7px; background: #faf5ff; border: 1.5px solid #c4b5fd; display: none; }
+  .result-card.visible { display: block; }
+  .result-card h4 { font-size: 10px; font-weight: 700; color: #7c3aed; margin-bottom: 3px; }
+  .result-card p { font-size: 10px; color: #374151; line-height: 1.45; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Furix AI — Security Knowledge Graph Traversal</h1>
+  <a href="index.html">&larr; Architecture Dashboard</a>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-title">5 Scenarios — One Graph</div>
+    <div id="scenarioList"></div>
+  </div>
+
+  <div class="graph-area">
+    <canvas class="graph-canvas" id="graphCanvas"></canvas>
+    <div class="graph-hint" id="graphHint">Select a scenario to see how AI agents<br>traverse the Security Knowledge Graph</div>
+    <div class="graph-stats" id="graphStats">58 nodes / 63 edges — unified knowledge graph</div>
+  </div>
+
+  <div class="narrative">
+    <div class="narr-header">
+      <div class="narr-agent" id="narrAgent"></div>
+      <h2 id="narrTitle">Select a scenario</h2>
+    </div>
+    <div class="narr-steps" id="narrSteps"></div>
+    <div class="result-card" id="resultCard">
+      <h4 id="resultTitle"></h4>
+      <p id="resultBody"></p>
+    </div>
+    <div class="controls">
+      <button class="ctrl-btn primary" id="btnPlay" disabled>Play Traversal</button>
+      <button class="ctrl-btn" id="btnReset" disabled>Reset</button>
+      <span class="speed-label">~2s per hop</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// MASTER GRAPH — single unified knowledge graph
+// ══════════════════════════════════════════════════════
+
+const masterNodes = [
+  // Assets (center spine)
+  { id:'N01', type:'asset',     label:'web-prod-01',        sub:'Internet-facing, DMZ',       x:0.38, y:0.32 },
+  { id:'N02', type:'asset',     label:'app-internal-01',    sub:'Internal app server',        x:0.50, y:0.42 },
+  { id:'N03', type:'asset',     label:'db-prod-01',         sub:'PostgreSQL, stores PII',     x:0.60, y:0.30 },
+  { id:'N04', type:'asset',     label:'monitor-01',         sub:'Internal monitoring',        x:0.58, y:0.56 },
+  { id:'N05', type:'asset',     label:'aws-prod-account',   sub:'AWS, critical',              x:0.52, y:0.15 },
+  { id:'N06', type:'asset',     label:'web-prod-02',        sub:'Internet-facing',            x:0.43, y:0.18 },
+  { id:'N07', type:'asset',     label:'api-gateway-01',     sub:'Internal, critical',         x:0.36, y:0.14 },
+  { id:'N08', type:'asset',     label:'mail-01',            sub:'Internal',                   x:0.48, y:0.68 },
+  { id:'N09', type:'asset',     label:'vpn-gateway-01',     sub:'Internet-facing, DMZ',       x:0.28, y:0.55 },
+  { id:'N10', type:'asset',     label:'data-proc-01',       sub:'Internal, data processing',  x:0.52, y:0.55 },
+  { id:'N11', type:'asset',     label:'data-proc-02',       sub:'Internal, same role',        x:0.62, y:0.50 },
+  { id:'N12', type:'asset',     label:'data-proc-03',       sub:'Internal, same role',        x:0.62, y:0.65 },
+  { id:'N13', type:'asset',     label:'jump-host-01',       sub:'Internal, admin access',     x:0.38, y:0.65 },
+  { id:'N14', type:'asset',     label:'dc-01',              sub:'Domain Controller, critical', x:0.50, y:0.78 },
+  // Findings
+  { id:'N15', type:'finding',   label:'Finding #4721',      sub:'Apache RCE',                 x:0.22, y:0.36 },
+  { id:'N16', type:'finding',   label:'Finding #4803',      sub:'Weak SSH config',            x:0.35, y:0.48 },
+  { id:'N17', type:'finding',   label:'Finding #4812',      sub:'Unpatched PostgreSQL',       x:0.70, y:0.25 },
+  { id:'N18', type:'finding',   label:'Finding #5102',      sub:'S3 public read',             x:0.42, y:0.05 },
+  { id:'N19', type:'finding',   label:'Finding #5200',      sub:'OpenSSL overflow',           x:0.22, y:0.16 },
+  { id:'N20', type:'finding',   label:'Finding #5301',      sub:'Weak VPN auth',              x:0.16, y:0.58 },
+  { id:'N21', type:'finding',   label:'Finding #5180',      sub:'Default SSH keys',           x:0.24, y:0.72 },
+  { id:'N22', type:'finding',   label:'Finding #5050',      sub:'Zerologon',                  x:0.38, y:0.85 },
+  // CVEs
+  { id:'N23', type:'cve',       label:'CVE-2021-41773',     sub:'CVSS 7.5 / KEV',            x:0.08, y:0.40 },
+  { id:'N24', type:'cve',       label:'CVE-2022-3602',      sub:'CVSS 9.8 / KEV',            x:0.08, y:0.20 },
+  { id:'N25', type:'cve',       label:'CVE-2022-3786',      sub:'CVSS 7.5',                  x:0.08, y:0.55 },
+  { id:'N26', type:'cve',       label:'CVE-2023-31419',     sub:'CVSS 7.5, ES DoS',          x:0.12, y:0.80 },
+  { id:'N27', type:'cve',       label:'CVE-2024-1234',      sub:'Auth bypass, CVSS 8.1',     x:0.06, y:0.68 },
+  { id:'N28', type:'cve',       label:'CVE-2020-1472',      sub:'Zerologon, CVSS 10.0',      x:0.20, y:0.92 },
+  // Software
+  { id:'N29', type:'software',  label:'Apache 2.4.49',      sub:'httpd',                      x:0.30, y:0.22 },
+  { id:'N30', type:'software',  label:'OpenSSL 3.0.6',      sub:'Vulnerable',                 x:0.30, y:0.06 },
+  { id:'N31', type:'software',  label:'OpenSSL 3.0.5',      sub:'Also vulnerable',            x:0.38, y:0.03 },
+  { id:'N32', type:'software',  label:'Elasticsearch 7.17', sub:'NEW — unapproved',           x:0.42, y:0.62 },
+  // Techniques
+  { id:'N33', type:'technique', label:'T1190',              sub:'Exploit Public App',          x:0.04, y:0.30 },
+  { id:'N34', type:'technique', label:'T1110',              sub:'Brute Force',                 x:0.04, y:0.78 },
+  { id:'N35', type:'technique', label:'T1078',              sub:'Valid Accounts',              x:0.14, y:0.92 },
+  { id:'N36', type:'technique', label:'T1068',              sub:'Privilege Escalation',        x:0.28, y:0.95 },
+  // Zones
+  { id:'N37', type:'zone',      label:'DMZ',                sub:'Internet-facing zone',        x:0.68, y:0.14 },
+  { id:'N38', type:'zone',      label:'Internal Zone',      sub:'Not internet-facing',         x:0.72, y:0.58 },
+  // Data classifications
+  { id:'N39', type:'dataclass', label:'PII Data',           sub:'Sensitivity: Critical',       x:0.74, y:0.30 },
+  { id:'N40', type:'dataclass', label:'Customer Records',   sub:'Sensitivity: High',           x:0.66, y:0.08 },
+  { id:'N41', type:'dataclass', label:'Analytics Data',     sub:'Sensitivity: Medium',         x:0.70, y:0.70 },
+  // Patches
+  { id:'N42', type:'patch',     label:'Apache 2.4.51',      sub:'Patch available',             x:0.82, y:0.85 },
+  { id:'N43', type:'patch',     label:'OpenSSL 3.0.7',      sub:'Fixes both CVEs',             x:0.82, y:0.74 },
+  // Check
+  { id:'N44', type:'check',     label:'S3-ACL-01',          sub:'Cloud check',                 x:0.30, y:0.02 },
+  // pgvector
+  { id:'N45', type:'vector',    label:'pgvector Search',    sub:'384-dim embeddings',          x:0.62, y:0.38 },
+  // Controls
+  { id:'N46', type:'control',   label:'CIS 3.3',            sub:'Data Access Control',         x:0.80, y:0.12 },
+  { id:'N47', type:'control',   label:'CIS 6.1',            sub:'Audit Log Mgmt',              x:0.80, y:0.25 },
+  { id:'N48', type:'control',   label:'NIST PR.AC-4',       sub:'Access permissions',          x:0.80, y:0.38 },
+  { id:'N49', type:'control',   label:'HIPAA 164.312(a)',   sub:'Access Control',              x:0.80, y:0.50 },
+  // Frameworks
+  { id:'N50', type:'framework', label:'CIS v8.1',           sub:'Framework',                   x:0.94, y:0.18 },
+  { id:'N51', type:'framework', label:'NIST CSF',           sub:'Framework',                   x:0.94, y:0.38 },
+  { id:'N52', type:'framework', label:'HIPAA',              sub:'Framework',                   x:0.94, y:0.50 },
+  // Alerts
+  { id:'N53', type:'alert',     label:'Anomaly Alert',      sub:'Ports: 47 → 89',             x:0.05, y:0.08 },
+  { id:'N54', type:'alert',     label:'Brute Force Alert',  sub:'23 failed VPN logins',        x:0.03, y:0.52 },
+  { id:'N55', type:'alert',     label:'Login Success Alert',sub:'After 23 failures',           x:0.03, y:0.62 },
+  // ScanRuns
+  { id:'N56', type:'scanrun',   label:'ScanRun #892',       sub:'Today, delta scan',           x:0.16, y:0.04 },
+  { id:'N57', type:'scanrun',   label:'ScanRun #885',       sub:'Yesterday, baseline',         x:0.24, y:0.04 },
+  // AIAction
+  { id:'N58', type:'action',    label:'AIAction',           sub:'Remediation / Investigate',   x:0.86, y:0.65 },
+];
+
+const masterEdges = [
+  // S1: Blast radius
+  /*E00*/ { from:'N15', to:'N01', label:'HAS_FINDING' },
+  /*E01*/ { from:'N15', to:'N23', label:'ASSOCIATED_CVE' },
+  /*E02*/ { from:'N01', to:'N29', label:'RUNS' },
+  /*E03*/ { from:'N29', to:'N23', label:'HAS_CVE' },
+  /*E04*/ { from:'N01', to:'N37', label:'EXPOSED_TO' },
+  /*E05*/ { from:'N23', to:'N33', label:'ENABLES' },
+  /*E06*/ { from:'N01', to:'N02', label:'CONNECTS_TO' },
+  /*E07*/ { from:'N02', to:'N03', label:'CONNECTS_TO' },
+  /*E08*/ { from:'N03', to:'N39', label:'STORES' },
+  /*E09*/ { from:'N16', to:'N02', label:'HAS_FINDING' },
+  /*E10*/ { from:'N02', to:'N04', label:'CONNECTS_TO' },
+  /*E11*/ { from:'N17', to:'N03', label:'HAS_FINDING' },
+  /*E12*/ { from:'N23', to:'N42', label:'MITIGATED_BY' },
+  // S2: Compliance
+  /*E13*/ { from:'N18', to:'N05', label:'HAS_FINDING' },
+  /*E14*/ { from:'N18', to:'N44', label:'DETECTED_BY' },
+  /*E15*/ { from:'N05', to:'N40', label:'STORES' },
+  /*E16*/ { from:'N18', to:'N45', label:'embed desc' },
+  /*E17*/ { from:'N45', to:'N46', label:'top-K match' },
+  /*E18*/ { from:'N45', to:'N47', label:'top-K match' },
+  /*E19*/ { from:'N45', to:'N48', label:'top-K match' },
+  /*E20*/ { from:'N45', to:'N49', label:'top-K match' },
+  /*E21*/ { from:'N46', to:'N50', label:'BELONGS_TO' },
+  /*E22*/ { from:'N47', to:'N50', label:'BELONGS_TO' },
+  /*E23*/ { from:'N48', to:'N51', label:'BELONGS_TO' },
+  /*E24*/ { from:'N49', to:'N52', label:'BELONGS_TO' },
+  // S3: Remediation
+  /*E25*/ { from:'N19', to:'N24', label:'ASSOCIATED_CVE' },
+  /*E26*/ { from:'N24', to:'N43', label:'MITIGATED_BY' },
+  /*E27*/ { from:'N25', to:'N43', label:'MITIGATED_BY' },
+  /*E28*/ { from:'N30', to:'N24', label:'HAS_CVE' },
+  /*E29*/ { from:'N30', to:'N25', label:'HAS_CVE' },
+  /*E30*/ { from:'N31', to:'N24', label:'HAS_CVE' },
+  /*E31*/ { from:'N31', to:'N25', label:'HAS_CVE' },
+  /*E32*/ { from:'N01', to:'N30', label:'RUNS' },
+  /*E33*/ { from:'N06', to:'N30', label:'RUNS' },
+  /*E34*/ { from:'N07', to:'N30', label:'RUNS' },
+  /*E35*/ { from:'N08', to:'N31', label:'RUNS' },
+  /*E36*/ { from:'N09', to:'N31', label:'RUNS' },
+  /*E37*/ { from:'N58', to:'N19', label:'RECOMMENDED_BY' },
+  // S4: Anomaly
+  /*E38*/ { from:'N53', to:'N10', label:'TRIGGERED' },
+  /*E39*/ { from:'N10', to:'N56', label:'FOUND_IN' },
+  /*E40*/ { from:'N10', to:'N57', label:'FOUND_IN' },
+  /*E41*/ { from:'N10', to:'N32', label:'RUNS (new)' },
+  /*E42*/ { from:'N32', to:'N26', label:'HAS_CVE' },
+  /*E43*/ { from:'N10', to:'N11', label:'CONNECTS_TO' },
+  /*E44*/ { from:'N10', to:'N12', label:'CONNECTS_TO' },
+  /*E45*/ { from:'N10', to:'N41', label:'STORES' },
+  /*E46*/ { from:'N10', to:'N38', label:'EXPOSED_TO' },
+  /*E47*/ { from:'N58', to:'N53', label:'RECOMMENDED_BY' },
+  // S5: Attack chain
+  /*E48*/ { from:'N54', to:'N09', label:'TRIGGERED' },
+  /*E49*/ { from:'N55', to:'N09', label:'TRIGGERED' },
+  /*E50*/ { from:'N20', to:'N09', label:'HAS_FINDING' },
+  /*E51*/ { from:'N20', to:'N27', label:'ASSOCIATED_CVE' },
+  /*E52*/ { from:'N27', to:'N34', label:'ENABLES' },
+  /*E53*/ { from:'N55', to:'N20', label:'CORRELATED_WITH' },
+  /*E54*/ { from:'N09', to:'N13', label:'CONNECTS_TO' },
+  /*E55*/ { from:'N21', to:'N13', label:'HAS_FINDING' },
+  /*E56*/ { from:'N21', to:'N35', label:'ENABLES' },
+  /*E57*/ { from:'N13', to:'N14', label:'CONNECTS_TO' },
+  /*E58*/ { from:'N22', to:'N14', label:'HAS_FINDING' },
+  /*E59*/ { from:'N22', to:'N28', label:'ASSOCIATED_CVE' },
+  /*E60*/ { from:'N28', to:'N36', label:'ENABLES' },
+  // Cross-scenario links
+  /*E61*/ { from:'N09', to:'N37', label:'EXPOSED_TO' },
+  /*E62*/ { from:'N13', to:'N38', label:'EXPOSED_TO' },
+];
+
+// ══════════════════════════════════════════════════════
+// SCENARIOS — reference master graph IDs
+// ══════════════════════════════════════════════════════
+
+const scenarios = [
+{
+  id: 'blast-radius',
+  agent: 'Agent 1: Risk Scorer',
+  title: 'Blast Radius — Apache RCE on Internet Server',
+  desc: 'Walks CONNECTS_TO edges to assess blast radius and lateral movement to PII database.',
+  relevantNodes: ['N01','N02','N03','N04','N15','N16','N17','N23','N29','N33','N37','N39','N42'],
+  relevantEdges: [0,1,2,3,4,5,6,7,8,9,10,11,12],
+  steps: [
+    { highlight:['N15'], pulseEdges:[], label:'Start: New Finding', detail:'Finding #4721 — Apache 2.4.49 path traversal RCE detected on web-prod-01.', insight:null },
+    { highlight:['N15','N23'], pulseEdges:[1], label:'Check CVE severity', detail:'Walk ASSOCIATED_CVE. CVE-2021-41773: CVSS 7.5, EPSS 0.97, CISA KEV listed.', insight:'HIGH: Actively exploited in the wild' },
+    { highlight:['N15','N23','N33'], pulseEdges:[5], label:'ATT&CK technique', detail:'Walk ENABLES → T1190: Exploit Public-Facing Application. Initial access vector.', insight:null },
+    { highlight:['N15','N01','N37'], pulseEdges:[0,4], label:'Asset context', detail:'web-prod-01 is in DMZ, EXPOSED_TO internet. Maximum network exposure.', insight:'CRITICAL: Internet-facing + actively exploited CVE' },
+    { highlight:['N01','N02'], pulseEdges:[6], label:'Hop 1: Lateral movement', detail:'Walk CONNECTS_TO. web-prod-01 reaches app-internal-01 on port 8080.', insight:null },
+    { highlight:['N02','N16'], pulseEdges:[9], label:'Connected finding', detail:'app-internal-01 has Finding #4803 — weak SSH config. Lateral movement path.', insight:'CHAIN: RCE → weak SSH = viable lateral movement' },
+    { highlight:['N02','N03'], pulseEdges:[7], label:'Hop 2: Deeper reach', detail:'Walk CONNECTS_TO → db-prod-01 on port 5432.', insight:null },
+    { highlight:['N03','N39','N17'], pulseEdges:[8,11], label:'Data + vulnerabilities', detail:'db-prod-01 STORES PII (Critical). Also has Finding #4812 — unpatched PostgreSQL.', insight:'CRITICAL: RCE → lateral → PII database (also vulnerable)' },
+    { highlight:['N23','N42'], pulseEdges:[12], label:'Check remediation', detail:'Walk MITIGATED_BY → Apache 2.4.51 patch available.', insight:null },
+  ],
+  result: { title:'AI Risk Score: 96/100', body:'Internet-facing server with actively exploited RCE (KEV + EPSS 0.97). Two-hop path to PII database with its own unpatched vuln. Attack chain: exploit web → weak SSH lateral → unpatched DB with PII. Patch available — P0 priority.' }
+},
+{
+  id: 'compliance-gap',
+  agent: 'Agent 2: Compliance Mapper',
+  title: 'Compliance Gap — S3 Public Read Access',
+  desc: 'Uses graph + pgvector to map ambiguous cloud finding across CIS, NIST, and HIPAA.',
+  relevantNodes: ['N05','N18','N40','N44','N45','N46','N47','N48','N49','N50','N51','N52'],
+  relevantEdges: [13,14,15,16,17,18,19,20,21,22,23,24],
+  steps: [
+    { highlight:['N18'], pulseEdges:[], label:'Start: Cloud Finding', detail:'Finding #5102 — S3 bucket has public read access. No static CIS mapping (ambiguous 20%).', insight:null },
+    { highlight:['N18','N44'], pulseEdges:[14], label:'Check origin', detail:'DETECTED_BY S3-ACL-01. No hardcoded control mapping — needs AI path.', insight:'No static mapping — entering AI compliance path' },
+    { highlight:['N18','N05','N40'], pulseEdges:[13,15], label:'Asset + data context', detail:'Asset: aws-prod-account (critical). STORES Customer Records (High sensitivity).', insight:'High-sensitivity data → HIPAA may apply' },
+    { highlight:['N18','N45'], pulseEdges:[16], label:'Embed finding description', detail:'Description embedded via BGE-small (384-dim). Query pgvector for top-K compliance chunks.', insight:null },
+    { highlight:['N45','N46','N47'], pulseEdges:[17,18], label:'CIS matches found', detail:'pgvector returns CIS 3.3 (Data Access, sim=0.91) and CIS 6.1 (Audit Log, sim=0.84).', insight:null },
+    { highlight:['N45','N48'], pulseEdges:[19], label:'NIST match found', detail:'Also matches NIST PR.AC-4 (Access permissions, sim=0.88).', insight:null },
+    { highlight:['N45','N49'], pulseEdges:[20], label:'HIPAA match (data-driven)', detail:'Because asset STORES high-sensitivity data → HIPAA 164.312(a)(1) Access Control.', insight:'Data sensitivity triggered cross-framework mapping' },
+    { highlight:['N46','N47','N50','N48','N51','N49','N52'], pulseEdges:[21,22,23,24], label:'Framework traversal', detail:'Walk BELONGS_TO: CIS 3.3+6.1 → CIS v8.1, NIST PR.AC-4 → NIST CSF, HIPAA 164.312(a) → HIPAA.', insight:null },
+  ],
+  result: { title:'Mapping: 4 Controls / 3 Frameworks', body:'Public S3 bucket with customer records violates: CIS 3.3 (Data Access), CIS 6.1 (Audit Logging), NIST PR.AC-4 (Access Permissions), HIPAA 164.312(a)(1). MAPS_TO edges written with mapping_type=ai + confidence scores.' }
+},
+{
+  id: 'remediation-impact',
+  agent: 'Agent 3: Remediation Generator',
+  title: 'Patch Impact — OpenSSL Across Fleet',
+  desc: 'Walks Patch → CVEs → Software → Assets to show 1 patch fixes 2 CVEs across 5 servers.',
+  relevantNodes: ['N01','N06','N07','N08','N09','N19','N24','N25','N30','N31','N43','N58'],
+  relevantEdges: [25,26,27,28,29,30,31,32,33,34,35,36,37],
+  steps: [
+    { highlight:['N19'], pulseEdges:[], label:'Start: Critical finding', detail:'Finding #5200 — OpenSSL buffer overflow. User clicks "Get Fix".', insight:null },
+    { highlight:['N19','N24'], pulseEdges:[25], label:'Identify CVE', detail:'ASSOCIATED_CVE → CVE-2022-3602: CVSS 9.8, KEV. Critical RCE.', insight:null },
+    { highlight:['N24','N43','N25'], pulseEdges:[26,27], label:'Patch + related CVEs', detail:'MITIGATED_BY → OpenSSL 3.0.7. Reverse walk: also mitigates CVE-2022-3786 (CVSS 7.5).', insight:'One patch fixes TWO CVEs' },
+    { highlight:['N30','N24','N25'], pulseEdges:[28,29], label:'Affected: OpenSSL 3.0.6', detail:'Walk HAS_CVE from Software nodes. OpenSSL 3.0.6 has both CVEs.', insight:null },
+    { highlight:['N31','N24','N25'], pulseEdges:[30,31], label:'Affected: OpenSSL 3.0.5', detail:'OpenSSL 3.0.5 also affected. Two vulnerable versions in fleet.', insight:null },
+    { highlight:['N01','N06','N07','N30'], pulseEdges:[32,33,34], label:'Assets on v3.0.6', detail:'RUNS edges: web-prod-01, web-prod-02, api-gateway-01. Three servers.', insight:null },
+    { highlight:['N08','N09','N31'], pulseEdges:[35,36], label:'Assets on v3.0.5', detail:'mail-01 and vpn-gateway-01 run 3.0.5. Total: 5 assets.', insight:'5 assets, 2 CVEs, 1 patch' },
+    { highlight:['N58','N19'], pulseEdges:[37], label:'Create AIAction', detail:'AIAction node (type=remediation, status=pending) + RECOMMENDED_BY edge + edges to all 5 assets.', insight:null },
+  ],
+  result: { title:'Remediation: 1 Patch → 2 CVEs → 5 Assets', body:'Upgrade OpenSSL to 3.0.7 across 5 servers (3 internet-facing). Fixes CVE-2022-3602 (CVSS 9.8) + CVE-2022-3786 (CVSS 7.5). P0 for internet-facing, P1 for internal. Rolling restart ~2 min each.' }
+},
+{
+  id: 'anomaly',
+  agent: 'Agent 4: Anomaly Explainer',
+  title: 'Port Spike — Unauthorized Elasticsearch',
+  desc: 'Isolation Forest flags +42 ports. Agent checks scan history, neighbors, and data sensitivity.',
+  relevantNodes: ['N10','N11','N12','N26','N32','N38','N41','N53','N56','N57','N58'],
+  relevantEdges: [38,39,40,41,42,43,44,45,46,47],
+  steps: [
+    { highlight:['N53'], pulseEdges:[], label:'Isolation Forest triggers', detail:'Port count: 47 → 89 on data-proc-01. Statistical anomaly (>3 sigma).', insight:null },
+    { highlight:['N53','N10'], pulseEdges:[38], label:'Identify asset', detail:'Walk TRIGGERED → data-proc-01: internal data processing server.', insight:null },
+    { highlight:['N10','N56','N57'], pulseEdges:[39,40], label:'Compare scan history', detail:'Walk FOUND_IN to ScanRuns. Yesterday: 47 ports, 230 processes. Today: 89 ports, 285 processes.', insight:'Significant: +42 ports overnight' },
+    { highlight:['N10','N32'], pulseEdges:[41], label:'New software detected', detail:'New RUNS edge: Elasticsearch 7.17. Ports 9200, 9300. Not in approved list.', insight:'Unauthorized software deployment' },
+    { highlight:['N32','N26'], pulseEdges:[42], label:'Known vulns', detail:'HAS_CVE → CVE-2023-31419: CVSS 7.5, Elasticsearch DoS.', insight:'Vulnerable version deployed' },
+    { highlight:['N10','N11','N12'], pulseEdges:[43,44], label:'Check neighbors', detail:'CONNECTS_TO data-proc-02 and 03. Neither has Elasticsearch.', insight:'Isolated incident, not systemic' },
+    { highlight:['N10','N41','N38'], pulseEdges:[45,46], label:'Data + exposure', detail:'STORES Analytics Data (medium). EXPOSED_TO Internal Zone only. Reduces external risk.', insight:null },
+    { highlight:['N58','N53'], pulseEdges:[47], label:'Generate action', detail:'AIAction: investigate unauthorized ES, restrict ports, audit for data exfiltration.', insight:null },
+  ],
+  result: { title:'Anomaly: Unauthorized Elasticsearch (HIGH)', body:'Elasticsearch 7.17 deployed unauthorized. 42 new ports. Known CVE (CVSS 7.5). Isolated to this server. Not internet-facing but has medium-sensitivity data. Recommend: block ports, contact owner, upgrade or remove.' }
+},
+{
+  id: 'attack-path',
+  agent: 'Agent 1 + SIEM Correlation',
+  title: 'Attack Chain — VPN to Domain Controller',
+  desc: 'SIEM alert + vulnerability graph reveals 3-hop attack path to full domain compromise.',
+  relevantNodes: ['N09','N13','N14','N20','N21','N22','N27','N28','N34','N35','N36','N37','N54','N55'],
+  relevantEdges: [48,49,50,51,52,53,54,55,56,57,58,59,60,61,62],
+  steps: [
+    { highlight:['N54'], pulseEdges:[], label:'SIEM: Brute force', detail:'23 failed VPN logins from 203.0.113.42 in 10 minutes. Threshold rule triggered.', insight:null },
+    { highlight:['N55','N54'], pulseEdges:[], label:'SIEM: Successful login', detail:'Same IP authenticated 2 minutes later. Compromise indicator.', insight:'Brute force succeeded — possible compromise' },
+    { highlight:['N54','N55','N09'], pulseEdges:[48,49], label:'Identify target', detail:'Walk TRIGGERED → vpn-gateway-01. Internet-facing, DMZ.', insight:null },
+    { highlight:['N55','N20','N27'], pulseEdges:[53,51], label:'Correlate with vulns', detail:'CORRELATED_WITH → Finding #5301 (weak VPN auth) → CVE-2024-1234 (auth bypass, CVSS 8.1).', insight:'CONFIRMED: Alert correlates with known vulnerability' },
+    { highlight:['N27','N34'], pulseEdges:[52], label:'ATT&CK: Initial access', detail:'CVE ENABLES T1110 (Brute Force). First link in chain.', insight:null },
+    { highlight:['N09','N13'], pulseEdges:[54], label:'Hop 1: Lateral reach', detail:'CONNECTS_TO jump-host-01 (internal admin box).', insight:null },
+    { highlight:['N13','N21','N35'], pulseEdges:[55,56], label:'Jump host vulnerable', detail:'Finding #5180: default SSH keys. Enables T1078 (Valid Accounts). Trivial lateral movement.', insight:'CHAIN: Brute force → default SSH → lateral' },
+    { highlight:['N13','N14'], pulseEdges:[57], label:'Hop 2: Domain Controller', detail:'CONNECTS_TO dc-01 (Domain Controller, critical). Admin RDP.', insight:null },
+    { highlight:['N14','N22','N28','N36'], pulseEdges:[58,59,60], label:'Zerologon on DC', detail:'Finding #5050: Zerologon (CVE-2020-1472, CVSS 10.0) → T1068 Privilege Escalation. Full domain compromise.', insight:'CRITICAL: VPN → jump host → Domain Controller takeover' },
+  ],
+  result: { title:'Attack Chain: 3-Hop Domain Compromise (P0)', body:'Active exploitation detected:\n1) T1110: Brute force VPN (CVE auth bypass) — ACTIVE\n2) T1078: Default SSH keys on jump host\n3) T1068: Zerologon on Domain Controller\n\nBlock source IP, force password reset, patch Zerologon, rotate SSH keys. Active incident — escalate to SOC.' }
+},
+];
+
+// ══════════════════════════════════════════════════════
+// COLORS
+// ══════════════════════════════════════════════════════
+
+const nodeColors = {
+  asset:     { bg:'#eff6ff', border:'#60a5fa', text:'#1e40af' },
+  finding:   { bg:'#fef2f2', border:'#f87171', text:'#991b1b' },
+  cve:       { bg:'#fef3c7', border:'#f59e0b', text:'#92400e' },
+  software:  { bg:'#f0fdf4', border:'#4ade80', text:'#166534' },
+  patch:     { bg:'#d1fae5', border:'#34d399', text:'#065f46' },
+  control:   { bg:'#ede9fe', border:'#a78bfa', text:'#5b21b6' },
+  framework: { bg:'#faf5ff', border:'#c084fc', text:'#6b21a8' },
+  check:     { bg:'#f0f9ff', border:'#38bdf8', text:'#0c4a6e' },
+  technique: { bg:'#fff1f2', border:'#fb7185', text:'#9f1239' },
+  alert:     { bg:'#fef2f2', border:'#ef4444', text:'#991b1b' },
+  scanrun:   { bg:'#f8fafc', border:'#94a3b8', text:'#334155' },
+  zone:      { bg:'#fff7ed', border:'#fb923c', text:'#9a3412' },
+  dataclass: { bg:'#fdf4ff', border:'#e879f9', text:'#86198f' },
+  action:    { bg:'#faf5ff', border:'#a78bfa', text:'#5b21b6' },
+  vector:    { bg:'#fdf4ff', border:'#e879f9', text:'#86198f' },
+};
+
+// ══════════════════════════════════════════════════════
+// RENDERER
+// ══════════════════════════════════════════════════════
+
+const canvas_el = document.getElementById('graphCanvas');
+const ctx = canvas_el.getContext('2d');
+let currentScenario = null;
+let currentStep = -1;
+let animating = false;
+let pulsePhase = 0;
+let highlightedNodes = new Set();
+let highlightedEdges = new Set();
+let pulsingEdges = new Set();
+let relevantNodes = new Set();
+let relevantEdges = new Set();
+let rafId = null;
+
+function resizeCanvas() {
+  const area = canvas_el.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  canvas_el.width = area.clientWidth * dpr;
+  canvas_el.height = area.clientHeight * dpr;
+  canvas_el.style.width = area.clientWidth + 'px';
+  canvas_el.style.height = area.clientHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  render();
+}
+
+function getPos(node) {
+  const area = canvas_el.parentElement;
+  return { x: node.x * area.clientWidth, y: node.y * area.clientHeight };
+}
+
+function nodeById(id) { return masterNodes.find(n => n.id === id); }
+
+function render() {
+  const area = canvas_el.parentElement;
+  const W = area.clientWidth, H = area.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  pulsePhase = (pulsePhase + 0.018) % 1;
+
+  // ── Draw ALL edges ──
+  masterEdges.forEach((e, idx) => {
+    const fn = nodeById(e.from), tn = nodeById(e.to);
+    if (!fn || !tn) return;
+    const a = getPos(fn), b = getPos(tn);
+
+    const isHighlighted = highlightedEdges.has(idx);
+    const isRelevant = relevantEdges.has(idx);
+    const isPulsing = pulsingEdges.has(idx);
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+
+    if (isHighlighted) {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2;
+    } else if (isRelevant) {
+      ctx.strokeStyle = 'rgba(130,145,170,0.5)';
+      ctx.lineWidth = 1;
+    } else {
+      ctx.strokeStyle = 'rgba(180,190,205,0.55)';
+      ctx.lineWidth = 0.8;
+    }
+    ctx.stroke();
+
+    // Arrow
+    const len = Math.sqrt((b.x-a.x)**2 + (b.y-a.y)**2);
+    if (len < 10) return;
+    const dx = (b.x-a.x)/len, dy = (b.y-a.y)/len;
+    const tipX = b.x - dx*24, tipY = b.y - dy*24;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX-dx*6+dy*3, tipY-dy*6-dx*3);
+    ctx.lineTo(tipX-dx*6-dy*3, tipY-dy*6+dx*3);
+    ctx.closePath();
+    ctx.fillStyle = isHighlighted ? '#3b82f6' : isRelevant ? 'rgba(130,145,170,0.5)' : 'rgba(180,190,205,0.55)';
+    ctx.fill();
+
+    // Edge label (only if highlighted)
+    if (isHighlighted) {
+      const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+      const angle = Math.atan2(b.y-a.y, b.x-a.x);
+      ctx.font = '8px -apple-system, sans-serif';
+      ctx.fillStyle = '#3b82f6';
+      ctx.textAlign = 'center';
+      ctx.fillText(e.label, mx + Math.sin(angle)*10, my - Math.cos(angle)*10);
+    }
+
+    // Pulse particles
+    if (isPulsing) {
+      for (let i = 0; i < 3; i++) {
+        const pt = ((pulsePhase * 2.5 + i * 0.33) % 1);
+        const px = a.x + (b.x-a.x)*pt, py = a.y + (b.y-a.y)*pt;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(59,130,246,${0.85 - pt*0.5})`;
+        ctx.fill();
+      }
+    }
+  });
+
+  // ── Draw ALL nodes ──
+  masterNodes.forEach(n => {
+    const pos = getPos(n);
+    const c = nodeColors[n.type] || nodeColors.asset;
+    const isActive = highlightedNodes.has(n.id);
+    const isRelevant_ = relevantNodes.has(n.id);
+    const r = isActive ? 22 : 18;
+
+    // Glow
+    if (isActive) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r + 10, 0, Math.PI*2);
+      const glow = ctx.createRadialGradient(pos.x, pos.y, r, pos.x, pos.y, r+12);
+      glow.addColorStop(0, 'rgba(59,130,246,0.2)');
+      glow.addColorStop(1, 'rgba(59,130,246,0)');
+      ctx.fillStyle = glow;
+      ctx.fill();
+    }
+
+    // Circle
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r, 0, Math.PI*2);
+    if (isActive) {
+      ctx.fillStyle = c.bg;
+      ctx.strokeStyle = c.border;
+      ctx.lineWidth = 2.5;
+    } else if (isRelevant_) {
+      ctx.fillStyle = c.bg;
+      ctx.strokeStyle = c.border;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.3;
+    } else {
+      ctx.fillStyle = c.bg;
+      ctx.strokeStyle = c.border;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.55;
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Type label inside node
+    ctx.font = `bold 7px -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    if (isActive) {
+      ctx.fillStyle = c.text;
+    } else if (isRelevant_) {
+      ctx.fillStyle = `rgba(${hexToRgb(c.text)},0.5)`;
+    } else {
+      ctx.fillStyle = `rgba(${hexToRgb(c.text)},0.4)`;
+    }
+    ctx.fillText(n.type.toUpperCase(), pos.x, pos.y + 2);
+
+    // Labels below
+    if (isActive) {
+      ctx.font = 'bold 9px -apple-system, sans-serif';
+      ctx.fillStyle = c.text;
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, pos.x, pos.y + r + 12);
+      ctx.font = '7px -apple-system, sans-serif';
+      ctx.fillStyle = '#6b7280';
+      ctx.fillText(n.sub, pos.x, pos.y + r + 22);
+    } else if (isRelevant_) {
+      ctx.font = '8px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(75,85,99,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, pos.x, pos.y + r + 11);
+    } else {
+      ctx.font = '7px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(156,163,175,0.6)';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, pos.x, pos.y + r + 11);
+    }
+  });
+
+  if (pulsingEdges.size > 0 || animating) {
+    rafId = requestAnimationFrame(render);
+  }
+}
+
+function hexToRgb(hex) {
+  const c = hex.replace('#','');
+  const r = parseInt(c.substring(0,2),16);
+  const g = parseInt(c.substring(2,4),16);
+  const b = parseInt(c.substring(4,6),16);
+  return `${r},${g},${b}`;
+}
+
+// ══════════════════════════════════════════════════════
+// SCENARIO UI
+// ══════════════════════════════════════════════════════
+
+function buildSidebar() {
+  const list = document.getElementById('scenarioList');
+  scenarios.forEach((sc, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'scenario-btn';
+    btn.innerHTML = `<div class="sc-agent">${sc.agent}</div><div class="sc-title">${sc.title}</div><div class="sc-desc">${sc.desc}</div>`;
+    btn.addEventListener('click', () => loadScenario(i));
+    list.appendChild(btn);
+  });
+}
+
+function loadScenario(idx) {
+  cancelAnimationFrame(rafId);
+  const sc = scenarios[idx];
+  currentScenario = sc;
+  currentStep = -1;
+  animating = false;
+
+  highlightedNodes = new Set();
+  highlightedEdges = new Set();
+  pulsingEdges = new Set();
+  relevantNodes = new Set(sc.relevantNodes);
+  relevantEdges = new Set(sc.relevantEdges);
+
+  document.querySelectorAll('.scenario-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+
+  document.getElementById('narrAgent').textContent = sc.agent;
+  document.getElementById('narrTitle').textContent = sc.title;
+  document.getElementById('graphHint').classList.add('hidden');
+
+  const stepsEl = document.getElementById('narrSteps');
+  stepsEl.innerHTML = '';
+  sc.steps.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'narr-step';
+    div.id = 'step-' + i;
+    div.innerHTML = `<div class="step-num">Step ${i+1}</div><div class="step-label">${s.label}</div><div class="step-detail">${s.detail}</div>${s.insight ? `<div class="step-insight">${s.insight}</div>` : ''}`;
+    stepsEl.appendChild(div);
+  });
+
+  document.getElementById('resultCard').classList.remove('visible');
+  document.getElementById('btnPlay').disabled = false;
+  document.getElementById('btnReset').disabled = false;
+
+  render();
+}
+
+function playTraversal() {
+  if (!currentScenario || animating) return;
+  animating = true;
+  document.getElementById('btnPlay').disabled = true;
+  currentStep = -1;
+  highlightedNodes = new Set();
+  highlightedEdges = new Set();
+  pulsingEdges = new Set();
+  document.getElementById('resultCard').classList.remove('visible');
+  document.querySelectorAll('.narr-step').forEach(s => s.classList.remove('active','done'));
+
+  function nextStep() {
+    currentStep++;
+    if (currentStep >= currentScenario.steps.length) {
+      animating = false;
+      pulsingEdges = new Set();
+      render();
+      const rc = document.getElementById('resultCard');
+      document.getElementById('resultTitle').textContent = currentScenario.result.title;
+      document.getElementById('resultBody').textContent = currentScenario.result.body;
+      rc.classList.add('visible');
+      document.getElementById('btnPlay').disabled = false;
+      return;
+    }
+
+    const step = currentScenario.steps[currentStep];
+
+    if (currentStep > 0) {
+      const prev = document.getElementById('step-'+(currentStep-1));
+      if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
+    }
+
+    const stepEl = document.getElementById('step-'+currentStep);
+    if (stepEl) { stepEl.classList.add('active'); stepEl.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+
+    step.highlight.forEach(id => highlightedNodes.add(id));
+
+    // Compute highlighted edges: all edges between any two highlighted nodes that are in relevantEdges
+    highlightedEdges = new Set();
+    masterEdges.forEach((e, idx) => {
+      if (relevantEdges.has(idx) && highlightedNodes.has(e.from) && highlightedNodes.has(e.to)) {
+        highlightedEdges.add(idx);
+      }
+    });
+
+    pulsingEdges = new Set(step.pulseEdges);
+    render();
+
+    setTimeout(nextStep, 2200);
+  }
+
+  nextStep();
+}
+
+function resetScenario() {
+  if (!currentScenario) return;
+  cancelAnimationFrame(rafId);
+  animating = false;
+  currentStep = -1;
+  highlightedNodes = new Set();
+  highlightedEdges = new Set();
+  pulsingEdges = new Set();
+  document.querySelectorAll('.narr-step').forEach(s => s.classList.remove('active','done'));
+  document.getElementById('resultCard').classList.remove('visible');
+  document.getElementById('btnPlay').disabled = false;
+  render();
+}
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+
+buildSidebar();
+document.getElementById('btnPlay').addEventListener('click', playTraversal);
+document.getElementById('btnReset').addEventListener('click', resetScenario);
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Draw ghost graph on load
+render();
+</script>
+</body>
+</html>
