@@ -86,6 +86,14 @@ export async function GET(
       status: r.status,
       remediation: r.remediation,
       details: safeParse(r.details),
+      // Phase 12D: enrichment fields
+      deduplicationHash: r.deduplicationHash,
+      checkModuleId: r.checkModuleId,
+      detectionMethod: r.detectionMethod,
+      cisControlId: r.cisControlId,
+      cisLevel: r.cisLevel,
+      firstDiscovered: r.firstDiscovered?.toISOString() ?? null,
+      lastSeen: r.lastSeen?.toISOString() ?? null,
       asset: r.asset
         ? {
             id: r.asset.id,

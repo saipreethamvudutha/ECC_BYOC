@@ -8,6 +8,7 @@
  * The client polls /api/scans/[id]/execute until status is "completed".
  */
 
+import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { CheckResult, ScanProgress, BatchResult } from "./types";
 import { builtinAdapter, getActiveAdapter } from "./adapters/builtin";
@@ -174,8 +175,38 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
         if (asset) assetMap.set(target, asset.id);
       }
 
+      const now = new Date();
+
+      // Compute deduplication hash and enrich each result with Phase 12D fields
+      interface EnrichedResult extends CheckResult {
+        target: string;
+        deduplicationHash: string;
+        assetId: string | null;
+        cisControlId?: string;
+        cisLevel?: number;
+        checkModuleId: string;
+        detectionMethod: string;
+      }
+      const enrichedResults: EnrichedResult[] = allResults.map((r) => {
+        const assetId = assetMap.get(r.target) ?? null;
+        const titleSlug = r.title.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 64);
+        const deduplicationHash = createHash('sha256')
+          .update(`${scan.tenantId}:${assetId ?? 'no-asset'}:${check.id}:${titleSlug}`)
+          .digest('hex');
+        const detailsObj = r.details || {};
+        return {
+          ...r,
+          assetId,
+          deduplicationHash,
+          checkModuleId: check.id,
+          detectionMethod: (detailsObj.detectionMethod as string) ?? 'network',
+          cisControlId: detailsObj.cisControlId as string | undefined,
+          cisLevel: detailsObj.cisLevel as number | undefined,
+        };
+      });
+
       await prisma.scanResult.createMany({
-        data: allResults.map((r) => ({
+        data: enrichedResults.map((r) => ({
           tenantId: scan.tenantId,
           scanId: scan.id,
           severity: r.severity,
@@ -184,11 +215,57 @@ export async function executeNextBatch(scanId: string): Promise<BatchResult> {
           remediation: r.remediation,
           cveId: r.cveId || null,
           cvssScore: r.cvssScore || null,
-          assetId: assetMap.get(r.target) || null,
+          assetId: r.assetId,
           status: "open",
           details: JSON.stringify({ ...r.details, checkModule: check.id }),
+          // Phase 12D: enrichment fields
+          deduplicationHash: r.deduplicationHash,
+          checkModuleId: r.checkModuleId,
+          detectionMethod: r.detectionMethod,
+          cisControlId: r.cisControlId || null,
+          cisLevel: r.cisLevel || null,
+          firstDiscovered: now,
+          lastSeen: now,
         })),
       });
+
+      // Phase 12D: Upsert AssetVulnerability for cross-scan deduplication
+      for (const r of enrichedResults) {
+        if (!r.assetId) continue; // only track for known assets
+        try {
+          await prisma.assetVulnerability.upsert({
+            where: {
+              tenantId_assetId_deduplicationHash: {
+                tenantId: scan.tenantId,
+                assetId: r.assetId,
+                deduplicationHash: r.deduplicationHash,
+              },
+            },
+            update: {
+              lastSeenAt: now,
+              status: 'open',
+              severity: r.severity, // severity may change between scans
+              cvssScore: r.cvssScore ?? undefined,
+            },
+            create: {
+              tenantId: scan.tenantId,
+              assetId: r.assetId,
+              deduplicationHash: r.deduplicationHash,
+              title: r.title,
+              severity: r.severity,
+              checkModuleId: r.checkModuleId,
+              cveId: r.cveId || null,
+              cvssScore: r.cvssScore || null,
+              cisControlId: r.cisControlId || null,
+              firstDiscoveredAt: now,
+              lastSeenAt: now,
+            },
+          });
+        } catch (upsertErr) {
+          // Non-fatal: log but don't fail the scan
+          console.warn(`[Scanner] AssetVulnerability upsert failed for ${r.deduplicationHash}:`, upsertErr);
+        }
+      }
 
       newFindings += allResults.length;
     }
@@ -486,6 +563,30 @@ async function runPostScanHooks(scanId: string, tenantId: string) {
           data: cleanData,
         });
       }
+    }
+
+    // 2b. Phase 12D: Update Asset denormalized vulnerability counts
+    try {
+      const assetIds = [...new Set(scan.results.filter((r) => r.assetId).map((r) => r.assetId as string))];
+      for (const assetId of assetIds) {
+        const counts = await prisma.scanResult.groupBy({
+          by: ['severity'],
+          where: { tenantId, assetId, status: 'open' },
+          _count: { severity: true },
+        });
+        const bySeverity = Object.fromEntries(counts.map((c) => [c.severity, c._count.severity]));
+        await prisma.asset.update({
+          where: { id: assetId },
+          data: {
+            vulnerabilityCount: Object.values(bySeverity).reduce((a, b) => a + b, 0),
+            criticalCount: bySeverity['critical'] ?? 0,
+            highCount: bySeverity['high'] ?? 0,
+            lastRiskScoredAt: new Date(),
+          },
+        });
+      }
+    } catch (countErr) {
+      console.error("Asset vuln count update error:", countErr);
     }
 
     // 3. Compliance automation — map scan findings to compliance controls (Phase 11)

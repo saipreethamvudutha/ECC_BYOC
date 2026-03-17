@@ -99,6 +99,15 @@ export async function GET(
     vlan: asset.vlan,
     installedSoftware: safeParse(asset.installedSoftware),
     userAccounts: safeParse(asset.userAccounts),
+    // Phase 12D: denormalized vulnerability counts
+    vulnerabilityCount: asset.vulnerabilityCount,
+    criticalCount: asset.criticalCount,
+    highCount: asset.highCount,
+    environment: asset.environment,
+    isProduction: asset.isProduction,
+    complianceScope: asset.complianceScope,
+    dataClassification: asset.dataClassification,
+    lastRiskScoredAt: asset.lastRiskScoredAt?.toISOString() ?? null,
     findings: asset.scanResults.map((r) => ({
       id: r.id,
       severity: r.severity,

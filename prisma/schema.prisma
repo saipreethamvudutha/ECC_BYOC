@@ -44,6 +44,10 @@ model Tenant {
   credentialVaults      CredentialVault[]
   scanTargetCredentials ScanTargetCredential[]
   scanDiffs             ScanDiff[]
+  scanPolicies          ScanPolicy[]
+  scanTemplates         ScanTemplate[]
+  assetVulnerabilities  AssetVulnerability[]
+  scanExecutions        ScanExecution[]
 
   @@map("tenants")
 }
@@ -85,6 +89,7 @@ model User {
   createdSSOProviders SSOProvider[]   @relation("SSOProviderCreator")
   createdSCIMTokens   SCIMToken[]    @relation("SCIMTokenCreator")
   createdCredentials  CredentialVault[] @relation("CredentialCreator")
+  createdPolicies     ScanPolicy[]      @relation("PolicyCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -425,10 +430,24 @@ model Asset {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // ── Phase 12D: Enterprise Risk + Compliance Fields ──
+  riskScore            Float?    // 0-10 calculated risk score (null = not yet scored)
+  vulnerabilityCount   Int       @default(0)  // denormalized cache — updated on scan complete
+  criticalCount        Int       @default(0)
+  highCount            Int       @default(0)
+  environment          String?   // "production" | "staging" | "development" | "testing"
+  isProduction         Boolean   @default(false)
+  complianceScope      String[]  @default([])  // ["pci-dss", "hipaa", "soc2", "cis-v81"]
+  slaDays              Int?      // remediation SLA in days (null = org default)
+  dataClassification   String?   // "public" | "internal" | "confidential" | "restricted"
+  scanFrequency        String?   // "daily" | "weekly" | "monthly" | "on-demand"
+  lastRiskScoredAt     DateTime?
+
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   group       AssetGroup? @relation(fields: [groupId], references: [id])
   scanResults ScanResult[]
   assetTags   AssetTag[]
+  vulnerabilities AssetVulnerability[]
 
   @@index([tenantId])
   @@map("assets")
@@ -454,13 +473,22 @@ model Scan {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // ── Phase 12D: Scan Metadata Fields ──
+  findingsSummary     String   @default("{}")  // JSON: {critical,high,medium,low,info,total}
+  complianceScore     Float?   // 0-100 pass rate (for compliance scan types)
+  scanDurationSeconds Int?
+  percentageComplete  Float    @default(0)
+  engineVersion       String?  // e.g. "nmap-7.94" | "builtin-1.0"
+
   tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   results ScanResult[]
   targetCredentials ScanTargetCredential[]
   diffsAsBase       ScanDiff[]             @relation("DiffBaseScan")
   diffsAsNew        ScanDiff[]             @relation("DiffNewScan")
+  executions        ScanExecution[]
 
   @@index([tenantId])
+  @@index([tenantId, createdAt(sort: Desc)])
   @@map("scans")
 }
 
@@ -480,12 +508,30 @@ model ScanResult {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // ── Phase 12D: Enterprise Finding Fields ──
+  deduplicationHash     String?   // SHA-256 of tenantId:assetId:checkModuleId:titleSlug
+  firstDiscovered       DateTime? // earliest date this finding was seen
+  lastSeen              DateTime? // most recent date this finding was seen
+  assignedTo            String?   // userId of assignee
+  remediationTargetDate DateTime?
+  cweId                 String?   // e.g. "CWE-89"
+  cvssVector            String?   // CVSS 3.1 vector string
+  epssScore             Float?    // 0-1 Exploit Prediction Scoring System score
+  checkModuleId         String?   // e.g. "ssh-sshd-config", "nmap-port-scan"
+  detectionMethod       String?   // "network" | "authenticated" | "agent"
+  cisControlId          String?   // e.g. "5.2.4" (CIS v8.1 control reference)
+  cisLevel              Int?      // CIS benchmark level: 1 or 2
+
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
   asset  Asset? @relation(fields: [assetId], references: [id])
 
   @@index([tenantId])
   @@index([scanId])
+  @@index([assetId])
+  @@index([tenantId, severity])
+  @@index([tenantId, status])
+  @@index([deduplicationHash])
   @@map("scan_results")
 }
 
@@ -931,4 +977,116 @@ model ScanDiff {
   @@unique([baseScanId, newScanId])
   @@index([tenantId, newScanId])
   @@map("scan_diffs")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ENTERPRISE SCANNER MODELS (Phase 12D)
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── SCAN POLICY (reusable scheduled scan configuration) ─────────
+model ScanPolicy {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  scanType    String   // "vulnerability" | "compliance" | "authenticated" | "full" | "discovery"
+  schedule    String?  // cron expression (null = manual only)
+  enabled     Boolean  @default(true)
+  targetTags  String[] @default([])  // run against assets matching these tag key:values
+  config      String   @default("{}") // JSON: portRange, fullScan, credentialId, etc.
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  User?           @relation("PolicyCreator", fields: [createdById], references: [id])
+  executions ScanExecution[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("scan_policies")
+}
+
+// ─── SCAN TEMPLATE (preset check module configurations) ──────────
+model ScanTemplate {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  description  String?
+  scanType     String   // scan type this template applies to
+  checkModules String[] @default([])  // specific check module IDs to include (empty = all)
+  excludeModules String[] @default([]) // check module IDs to skip
+  isBuiltin    Boolean  @default(false) // true = shipped with platform
+  config       String   @default("{}") // JSON: scan-level config overrides
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("scan_templates")
+}
+
+// ─── ASSET VULNERABILITY (canonical cross-scan deduplication) ────
+// One record per unique vulnerability per asset — persists across scans.
+// Updated each time the same fingerprint appears in a new scan result.
+model AssetVulnerability {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  assetId               String
+  deduplicationHash     String    // SHA-256: tenantId:assetId:checkModuleId:titleSlug
+  title                 String
+  severity              String    // critical, high, medium, low, info
+  checkModuleId         String?
+  cveId                 String?
+  cweId                 String?
+  cvssScore             Float?
+  cvssVector            String?
+  epssScore             Float?
+  cisControlId          String?   // CIS v8.1 control ID if applicable
+  firstDiscoveredAt     DateTime
+  lastSeenAt            DateTime
+  resolvedAt            DateTime?
+  status                String    @default("open") // "open" | "resolved" | "false_positive" | "accepted_risk"
+  assignedTo            String?   // userId
+  remediationTargetDate DateTime?
+  scanResultIds         String[]  @default([]) // last 10 ScanResult IDs (for evidence trail)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, assetId, deduplicationHash])
+  @@index([tenantId, assetId])
+  @@index([tenantId, severity, status])
+  @@map("asset_vulnerabilities")
+}
+
+// ─── SCAN EXECUTION (per-check batch audit log) ──────────────────
+// Tracks execution of each check module per target per scan.
+// Enables granular performance monitoring and failure attribution.
+model ScanExecution {
+  id            String    @id @default(uuid())
+  tenantId      String
+  scanId        String
+  policyId      String?   // null if manually triggered
+  batchNumber   Int
+  checkModuleId String    // e.g. "nmap-port-scan", "cis-ssh-hardening"
+  target        String    // IP or hostname
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  durationMs    Int?
+  status        String    @default("running") // "running" | "completed" | "failed" | "skipped"
+  findingCount  Int       @default(0)
+  errorMessage  String?
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scan   Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  policy ScanPolicy? @relation(fields: [policyId], references: [id])
+
+  @@index([tenantId, scanId])
+  @@index([tenantId, checkModuleId])
+  @@map("scan_executions")
 }

@@ -65,7 +65,7 @@ export const cisBenchmarkCheck: CheckModule = {
           const sslFindings = parseSslEnumCiphers(port.scripts, port.number);
           if (sslFindings.length > 0) {
             for (const f of sslFindings) {
-              f.details = { ...f.details, cisControlId: '3.10', cisTitle: CIS_CONTROLS['3.10'].title };
+              f.details = { ...f.details, cisControlId: '3.10', cisTitle: CIS_CONTROLS['3.10'].title, checkModuleId: 'cis-benchmark', detectionMethod: 'network' };
             }
             controlResults.set('3.10', { pass: false, findings: sslFindings });
           } else {
@@ -80,7 +80,7 @@ export const cisBenchmarkCheck: CheckModule = {
           const allSshFindings = [...sshAuthFindings, ...sshAlgoFindings];
 
           for (const f of allSshFindings) {
-            f.details = { ...f.details, cisControlId: '5.2', cisTitle: CIS_CONTROLS['5.2'].title };
+            f.details = { ...f.details, cisControlId: '5.2', cisTitle: CIS_CONTROLS['5.2'].title, checkModuleId: 'cis-benchmark', detectionMethod: 'network' };
           }
 
           const hasFail = allSshFindings.some((f) => f.severity !== 'info');
@@ -91,7 +91,7 @@ export const cisBenchmarkCheck: CheckModule = {
         if (port.number === 21 || port.service?.name === 'ftp') {
           const ftpFindings = parseFtpAnon(port.scripts);
           for (const f of ftpFindings) {
-            f.details = { ...f.details, cisControlId: '4.8', cisTitle: CIS_CONTROLS['4.8'].title };
+            f.details = { ...f.details, cisControlId: '4.8', cisTitle: CIS_CONTROLS['4.8'].title, checkModuleId: 'cis-benchmark', detectionMethod: 'network' };
           }
           controlResults.set('4.8', { pass: ftpFindings.length === 0, findings: ftpFindings });
         }
@@ -100,7 +100,7 @@ export const cisBenchmarkCheck: CheckModule = {
         if (port.number === 445 || port.number === 139 || port.service?.name?.includes('smb')) {
           const smbFindings = parseSmbSecurityMode(port.scripts);
           for (const f of smbFindings) {
-            f.details = { ...f.details, cisControlId: '4.1', cisTitle: CIS_CONTROLS['4.1'].title };
+            f.details = { ...f.details, cisControlId: '4.1', cisTitle: CIS_CONTROLS['4.1'].title, checkModuleId: 'cis-benchmark', detectionMethod: 'network' };
           }
           controlResults.set('4.1', { pass: smbFindings.length === 0, findings: smbFindings });
         }
@@ -109,7 +109,7 @@ export const cisBenchmarkCheck: CheckModule = {
         if (port.number === 161 || port.service?.name === 'snmp') {
           const snmpFindings = parseSnmpInfo(port.scripts);
           for (const f of snmpFindings) {
-            f.details = { ...f.details, cisControlId: '4.8', cisTitle: CIS_CONTROLS['4.8'].title };
+            f.details = { ...f.details, cisControlId: '4.8', cisTitle: CIS_CONTROLS['4.8'].title, checkModuleId: 'cis-benchmark', detectionMethod: 'network' };
           }
           const existing = controlResults.get('4.8');
           if (existing) {
@@ -155,6 +155,8 @@ export const cisBenchmarkCheck: CheckModule = {
           ),
           framework: 'CIS v8.1',
           scanEngine: 'nmap',
+          checkModuleId: 'cis-benchmark',
+          detectionMethod: 'network',
         },
       });
 

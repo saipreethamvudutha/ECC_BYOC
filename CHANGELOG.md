@@ -4,6 +4,60 @@ All notable changes to the BYOC Cybersecurity Platform are documented here.
 
 ---
 
+## [1.4.0] — 2026-03-16 — Phase 12D: CIS v8.1 Linux Benchmark + Enterprise DB Schema
+
+### Added
+
+**CIS v8.1 Linux Benchmark — 12 new SSH check modules (~55 controls)**
+- `cis-filesystem-mounts` — /tmp, /var/tmp, /dev/shm mount options (CIS 1.1.x), sticky bit check
+- `cis-unnecessary-services` — 14 services including xinetd, avahi, CUPS, rsync (CIS 2.x)
+- `cis-network-parameters` — 9 sysctl parameters: IP forwarding, ICMP redirects, SYN cookies (CIS 3.x)
+- `cis-auditd-service` — auditd active/enabled + audit=1 kernel parameter (CIS 4.1.1–4.1.3)
+- `cis-auditd-rules` — 5 audit rule categories: shadow, passwd, sudoers, privileged, network (CIS 4.1.4–4.1.17)
+- `cis-rsyslog` — rsyslog active/enabled + FileCreateMode check (CIS 4.2.x)
+- `cis-cron-permissions` — ownership and mode for 6 cron paths (CIS 5.1.x)
+- `cis-ssh-hardening` — deep sshd -T parse: 22 directives including Ciphers, MACs, KexAlgorithms (CIS 5.2.1–5.2.22)
+- `cis-pam-password` — pwquality minlen, pam_faillock, login.defs PASS_MAX_DAYS/PASS_MIN_DAYS (CIS 5.3/5.4)
+- `cis-sudo-hardening` — use_pty, log_file, NOPASSWD detection (CIS 5.3.4–5.3.5)
+- `cis-user-group-audit` — empty passwords, UID-0 non-root, duplicate UIDs/GIDs (CIS 6.2.x)
+- `cis-file-integrity` — /etc/passwd+shadow+group permissions, world-writable files, unowned files (CIS 6.1.x)
+
+**CIS Control Mapping Registry (`src/lib/scanner/checks/cis-mappings.ts`)**
+- 55 CIS v8.1 Linux controls registered with IDs, levels (1/2), families, descriptions, and remediation guidance
+- Families: filesystem (12), services (6), network (7), logging (9), access (15), maintenance (6)
+- `getCisControl(id)` and `getCisControlsByFamily(family)` utility functions
+
+**CIS Control IDs wired into all 8 existing SSH modules**
+- All `ssh-*` check modules now emit `cisControlId`, `cisLevel`, `checkModuleId`, `detectionMethod` in details
+
+**Enterprise DB Schema (4 new models, ~40 new fields)**
+- `ScanPolicy` model — reusable scheduled scan configurations with target tag filters
+- `ScanTemplate` model — preset check module lists for customized scan types
+- `AssetVulnerability` model — canonical cross-scan finding deduplication per asset
+- `ScanExecution` model — per-check batch execution audit log
+- Asset model: +11 fields (`riskScore`, `vulnerabilityCount`, `criticalCount`, `highCount`, `environment`, `isProduction`, `complianceScope`, `slaDays`, `dataClassification`, `scanFrequency`, `lastRiskScoredAt`)
+- Scan model: +5 fields (`findingsSummary`, `complianceScore`, `scanDurationSeconds`, `percentageComplete`, `engineVersion`)
+- ScanResult model: +12 fields (`deduplicationHash`, `firstDiscovered`, `lastSeen`, `assignedTo`, `remediationTargetDate`, `cweId`, `cvssVector`, `epssScore`, `checkModuleId`, `detectionMethod`, `cisControlId`, `cisLevel`)
+- 6 new performance indices on ScanResult (`assetId`, `tenantId+severity`, `tenantId+status`, `deduplicationHash`) and Scan (`tenantId+createdAt`)
+
+**Scanner Engine Enhancements (`src/lib/scanner/index.ts`)**
+- SHA-256 deduplication hash computed for every finding: `tenantId:assetId:checkModuleId:titleSlug`
+- `AssetVulnerability` upsert on every finding — persists across scans, tracks `firstDiscoveredAt`/`lastSeenAt`
+- Asset `vulnerabilityCount`, `criticalCount`, `highCount` updated after each scan completes
+- `checkModuleId`, `detectionMethod`, `cisControlId`, `cisLevel` stored on every ScanResult
+
+**Adapter Updates**
+- `compliance` scan type: +12 CIS SSH check modules
+- `enterprise` scan type: +12 CIS SSH check modules
+- `authenticated` scan type: +12 CIS SSH check modules (between SSH and WinRM checks)
+- Both nmap and builtin adapters updated
+
+### Changed
+- `cis-benchmark.ts` NSE-based findings now emit `checkModuleId: 'cis-benchmark'` + `detectionMethod: 'network'`
+- `ssh.ts` all 8 modules now include `checkModuleId`, `cisControlId`, `cisLevel`, `detectionMethod` in details
+
+---
+
 ## [1.3.0] — 2026-03-16 — Phase 12C: SSH/WinRM Authenticated Scanning + Diff Engine + Parallel Nmap
 
 ### Added

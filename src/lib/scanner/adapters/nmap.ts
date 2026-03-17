@@ -20,6 +20,9 @@ import { nmapVulnScriptsCheck } from '../checks/nmap-vuln-scripts';
 import { nmapAuthScanCheck } from '../checks/nmap-auth-scan';
 import { cisBenchmarkCheck } from '../checks/cis-benchmark';
 
+// CIS v8.1 SSH-based check modules (Phase 12D)
+import { cisSshChecks } from '../checks/cis-ssh';
+
 // HTTP-based modules (unchanged from builtin)
 import { httpHeadersCheck } from '../checks/http-headers';
 import { sslTlsCheck } from '../checks/ssl-tls';
@@ -55,6 +58,7 @@ const CHECKS_BY_TYPE: Record<string, CheckModule[]> = {
     infoDisclosureCheck,
     cisBenchmarkCheck,
     nmapAuthScanCheck,
+    ...cisSshChecks,
   ],
 
   full: [
@@ -97,6 +101,7 @@ const CHECKS_BY_TYPE: Record<string, CheckModule[]> = {
     nmapVulnScriptsCheck,
     nmapAuthScanCheck,
     cisBenchmarkCheck,
+    ...cisSshChecks,
   ],
 
   authenticated: [
@@ -111,6 +116,7 @@ const CHECKS_BY_TYPE: Record<string, CheckModule[]> = {
     sshFilePermissionsCheck,
     sshCronJobsCheck,
     sshSshdConfigCheck,
+    ...cisSshChecks,
     winrmOsInfoCheck,
     winrmLocalUsersCheck,
     winrmLocalAdminsCheck,

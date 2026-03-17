@@ -49,9 +49,13 @@ export const sshOsInfoCheck: CheckModule = {
         remediation: 'Ensure OS is up to date and not end-of-life.',
         details: {
           checkModule: 'ssh-os-info',
+          checkModuleId: 'ssh-os-info',
           target: host,
           rawOutput: result.stdout,
           scanEngine: 'ssh',
+          detectionMethod: 'authenticated',
+          cisControlId: '1.9',
+          cisLevel: 1,
         },
       }];
     } catch (err) {
@@ -95,7 +99,7 @@ export const sshUserAccountsCheck: CheckModule = {
           severity: 'info',
           description: `Found ${accounts.length} active user accounts with login shell.`,
           remediation: 'Review user accounts and remove any that are no longer needed. Enforce least-privilege access.',
-          details: { checkModule: 'ssh-user-accounts', target: host, accounts, scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-user-accounts', checkModuleId: 'ssh-user-accounts', target: host, accounts, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '6.2.1', cisLevel: 1 },
         });
       }
 
@@ -107,7 +111,7 @@ export const sshUserAccountsCheck: CheckModule = {
           severity: 'critical',
           description: `Found ${uid0Extras.length} account(s) with UID 0 (root equivalent): ${uid0Extras.map(a => a.username).join(', ')}.`,
           remediation: 'Immediately investigate and remove unauthorized UID 0 accounts.',
-          details: { checkModule: 'ssh-user-accounts', target: host, uid0Accounts: uid0Extras, scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-user-accounts', checkModuleId: 'ssh-user-accounts', target: host, uid0Accounts: uid0Extras, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '6.2.5', cisLevel: 1 },
         });
       }
 
@@ -148,7 +152,7 @@ export const sshSudoConfigCheck: CheckModule = {
           severity: 'high',
           description: `Found ${lines.length} sudo rule(s) allowing passwordless privilege escalation: ${lines.slice(0, 3).join('; ')}`,
           remediation: 'Remove NOPASSWD from sudo rules unless absolutely required. Require password for all sudo operations.',
-          details: { checkModule: 'ssh-sudo-config', target: host, nopasswdRules: lines, scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-sudo-config', checkModuleId: 'ssh-sudo-config', target: host, nopasswdRules: lines, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.3.1', cisLevel: 1 },
         });
       }
       return findings;
@@ -185,7 +189,7 @@ export const sshListeningServicesCheck: CheckModule = {
         severity: 'info',
         description: `SSH-authenticated view of all listening TCP/UDP services including localhost-only services not visible to external port scans.`,
         remediation: 'Review all listening services. Disable any services not required for business operations.',
-        details: { checkModule: 'ssh-listening-services', target: host, rawOutput: result.stdout, scanEngine: 'ssh' },
+        details: { checkModule: 'ssh-listening-services', checkModuleId: 'ssh-listening-services', target: host, rawOutput: result.stdout, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '2.2.1', cisLevel: 1 },
       }];
     } catch (err) {
       return [sshErrorResult(host, 'Listening Services', err)];
@@ -226,7 +230,7 @@ export const sshInstalledPackagesCheck: CheckModule = {
         severity: 'info',
         description: `Authenticated software inventory retrieved. ${packages.length} installed packages found.`,
         remediation: 'Keep all software up to date. Remove unused packages to reduce attack surface.',
-        details: { checkModule: 'ssh-installed-packages', target: host, packageCount: packages.length, packages: packages.slice(0, 50), scanEngine: 'ssh' },
+        details: { checkModule: 'ssh-installed-packages', checkModuleId: 'ssh-installed-packages', target: host, packageCount: packages.length, packages: packages.slice(0, 50), scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '1.9', cisLevel: 1 },
       }];
     } catch (err) {
       return [sshErrorResult(host, 'Installed Packages', err)];
@@ -271,7 +275,7 @@ export const sshFilePermissionsCheck: CheckModule = {
             severity: 'critical',
             description: `The /etc/shadow file (containing password hashes) has world-readable permissions (${perms}). This exposes all password hashes to any local user.`,
             remediation: 'Run: chmod 640 /etc/shadow && chown root:shadow /etc/shadow',
-            details: { checkModule: 'ssh-file-permissions', target: host, file: filePath, permissions: perms, scanEngine: 'ssh' },
+            details: { checkModule: 'ssh-file-permissions', checkModuleId: 'ssh-file-permissions', target: host, file: filePath, permissions: perms, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '6.1.2', cisLevel: 1 },
           });
         }
       }
@@ -282,7 +286,7 @@ export const sshFilePermissionsCheck: CheckModule = {
           severity: 'info',
           description: `Checked permissions for critical files (/etc/passwd, /etc/shadow, /etc/sudoers, sshd_config). No critical misconfigurations found.`,
           remediation: 'Continue monitoring file permissions as part of regular security hardening reviews.',
-          details: { checkModule: 'ssh-file-permissions', target: host, files: lines, scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-file-permissions', checkModuleId: 'ssh-file-permissions', target: host, files: lines, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '6.1.1', cisLevel: 1 },
         });
       }
 
@@ -320,7 +324,7 @@ export const sshCronJobsCheck: CheckModule = {
         severity: 'info',
         description: `System cron job configuration retrieved for ${host}. Review for unauthorized scheduled tasks.`,
         remediation: 'Audit cron jobs regularly. Remove any unrecognized or unnecessary scheduled tasks.',
-        details: { checkModule: 'ssh-cron-jobs', target: host, rawOutput: result.stdout, scanEngine: 'ssh' },
+        details: { checkModule: 'ssh-cron-jobs', checkModuleId: 'ssh-cron-jobs', target: host, rawOutput: result.stdout, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.1.8', cisLevel: 1 },
       }];
     } catch (err) {
       return [sshErrorResult(host, 'Cron Jobs', err)];
@@ -359,7 +363,7 @@ export const sshSshdConfigCheck: CheckModule = {
           severity: 'high',
           description: 'The SSH daemon is configured to allow direct root login. This exposes the root account to brute force attacks.',
           remediation: 'Set "PermitRootLogin no" in /etc/ssh/sshd_config and restart sshd.',
-          details: { checkModule: 'ssh-sshd-config', target: host, setting: 'PermitRootLogin yes', scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-sshd-config', checkModuleId: 'ssh-sshd-config', target: host, setting: 'PermitRootLogin yes', scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.2.7', cisLevel: 1 },
         });
       }
 
@@ -369,7 +373,7 @@ export const sshSshdConfigCheck: CheckModule = {
           severity: 'medium',
           description: 'The SSH daemon allows password-based authentication, which is vulnerable to brute force attacks. Key-based authentication is recommended.',
           remediation: 'Set "PasswordAuthentication no" in /etc/ssh/sshd_config and use SSH key pairs exclusively.',
-          details: { checkModule: 'ssh-sshd-config', target: host, setting: 'PasswordAuthentication yes', scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-sshd-config', checkModuleId: 'ssh-sshd-config', target: host, setting: 'PasswordAuthentication yes', scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.2.1', cisLevel: 1 },
         });
       }
 
@@ -379,7 +383,7 @@ export const sshSshdConfigCheck: CheckModule = {
           severity: 'critical',
           description: 'The SSH daemon allows login with empty passwords. Any account with no password set is accessible without authentication.',
           remediation: 'Set "PermitEmptyPasswords no" in /etc/ssh/sshd_config immediately.',
-          details: { checkModule: 'ssh-sshd-config', target: host, setting: 'PermitEmptyPasswords yes', scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-sshd-config', checkModuleId: 'ssh-sshd-config', target: host, setting: 'PermitEmptyPasswords yes', scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.2.8', cisLevel: 1 },
         });
       }
 
@@ -389,7 +393,7 @@ export const sshSshdConfigCheck: CheckModule = {
           severity: 'info',
           description: 'SSHD configuration check passed. Root login and password auth appear to be appropriately restricted.',
           remediation: 'Continue following SSH hardening guidelines (CIS Benchmark SSH recommendations).',
-          details: { checkModule: 'ssh-sshd-config', target: host, rawOutput: result.stdout, scanEngine: 'ssh' },
+          details: { checkModule: 'ssh-sshd-config', checkModuleId: 'ssh-sshd-config', target: host, rawOutput: result.stdout, scanEngine: 'ssh', detectionMethod: 'authenticated', cisControlId: '5.2.1', cisLevel: 1 },
         });
       }
 

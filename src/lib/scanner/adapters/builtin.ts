@@ -30,6 +30,8 @@ import { cloudInventoryCheck } from "../checks/cloud-inventory";
 // Phase 12A: Nmap adapter
 import { isNmapAvailable } from "../nmap";
 import { nmapAdapter } from "./nmap";
+// Phase 12D: CIS v8.1 SSH checks (gracefully return [] without credential)
+import { cisSshChecks } from "../checks/cis-ssh";
 
 // All available check modules (12 total: 8 original + 4 new)
 const ALL_CHECKS: CheckModule[] = [
@@ -102,12 +104,20 @@ const CHECKS_BY_TYPE: Record<string, string[]> = {
   ],
 };
 
+// Scan types that include CIS SSH checks (all return [] without credential — safe to include always)
+const CIS_SSH_SCAN_TYPES = new Set(['compliance', 'enterprise', 'authenticated']);
+
 export const builtinAdapter: ScannerAdapter = {
   name: "builtin",
 
   getCheckModules(scanType: string): CheckModule[] {
     const checkIds = CHECKS_BY_TYPE[scanType] || CHECKS_BY_TYPE.full;
-    return ALL_CHECKS.filter((c) => checkIds.includes(c.id));
+    const baseModules = ALL_CHECKS.filter((c) => checkIds.includes(c.id));
+    // Append CIS SSH checks for compliance/enterprise/authenticated scan types
+    if (CIS_SSH_SCAN_TYPES.has(scanType)) {
+      return [...baseModules, ...cisSshChecks];
+    }
+    return baseModules;
   },
 };
 
