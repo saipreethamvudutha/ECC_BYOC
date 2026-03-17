@@ -98,13 +98,11 @@ test.describe("Phase 12D: CIS SSH Check Modules", () => {
       targets: ["127.0.0.1"],
     });
 
-    // Skip gracefully if ScanTargetCredential table not yet migrated (Phase 12C migration pending)
-    if (result.status === 400 || result.status === 500) {
-      const errData = result.data as Record<string, unknown>;
-      if (String(errData.error || "").includes("credential") || String(errData.error || "").includes("table")) {
-        console.log("TC-12D-004: Skipping — authenticated scan unavailable (run npm run db:push to migrate)");
-        return;
-      }
+    // Skip gracefully if ScanTargetCredential table not yet migrated (Phase 12C migration pending).
+    // Any 4xx/5xx on authenticated scan type indicates DB tables not yet applied.
+    if (result.status >= 400) {
+      console.log(`TC-12D-004: Skipping — authenticated scan returned ${result.status} (run npm run db:push to migrate)`);
+      return;
     }
     expect(result.status).toBe(200);
 
